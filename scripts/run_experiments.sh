@@ -83,4 +83,12 @@ if [[ $rc -ne 0 && $rc -ne 2 ]]; then exit $rc; fi
 echo "=== 8. Паспорт прогонов: даты, model_reported, промпт, параметры, вызовы и ошибки ==="
 $PY -m src.manifest $DEMO
 
+echo "=== 9. Анализ: analysis.ipynb ==="
+if [[ -n "$DEMO" ]]; then
+  scripts/run_analysis.sh --demo   # случайные оценки в demo/grading/, копия ноутбука с DEMO = True в demo/
+else
+  # Реальный анализ — после ручной проверки (G2): ноутбук выполняется на месте, выходы остаются в нём.
+  echo "Когда .venv/bin/python -m src.checks g2 даст код 0: scripts/run_analysis.sh"
+fi
+
 echo "=== Готово ==="
