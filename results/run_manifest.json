@@ -1,4 +1,134 @@
 {
+  "_comment": "Собрано src.manifest по журналу и таблицам; руками не править.",
+  "demo": false,
+  "generated_utc": "2026-10-09T23:04:53+00:00",
+  "git_head": "3a2aee1a7126d1200ef900c774e3c4aee16448ef",
+  "log": "logs/calls.jsonl",
+  "hypotheses": {
+    "ids": [],
+    "commit": "8b79b796bac1c5e138d6754021fbbc16c696f4f9",
+    "commit_time": "2026-10-09T21:22:59+03:00"
+  },
+  "prompt": {
+    "version_config": null,
+    "hash_config": null,
+    "version_code": "v1",
+    "hash_code": "d946bcbce2dd"
+  },
+  "params": {
+    "temperature_main": 0,
+    "sc_repeats": 5,
+    "sc_temperature": 0.7,
+    "languages": [
+      "ru"
+    ],
+    "seed": 42,
+    "bootstrap_n": 1000,
+    "typeE": {
+      "_comment": "Тип E (шаг 06), используется src/typeE.py и src/run_classifier.py; seed — общий (поле seed). test_mode: enriched (n_test_failures отказов в тесте) или natural (естественная доля, ~7 из 200) — ожидает решения человека (flow/HUMAN_NOTES.md). shot_failures: сколько отказов в наборе few-shot данного размера; наборы вложенные (5 ⊂ 20). n_resamples: число случайных стратифицированных наборов для разброса LogReg/NB (без API). n_dev_rows: строки пула для отладки промпта (experiment=dev). После изменения параметров: .venv/bin/python -m src.typeE split && .venv/bin/python -m src.typeE classical (только до LLM-прогонов типа E).",
+      "dataset": "AI4I 2020 (UCI id 601)",
+      "data_file": "data/ai4i2020.csv",
+      "split_file": "data/e_split.json",
+      "test_mode": "enriched",
+      "n_test": 200,
+      "n_test_failures": 40,
+      "shots": [
+        0,
+        5,
+        20
+      ],
+      "shot_failures": {
+        "5": 2,
+        "20": 5
+      },
+      "n_resamples": 20,
+      "n_dev_rows": 6
+    }
+  },
+  "typeE_split_hash": "446cd9631466",
+  "calls_by_experiment": {
+    "dev": {
+      "first_utc": "2026-10-09T22:22:38.530+00:00",
+      "last_utc": "2026-10-09T22:31:30.312+00:00",
+      "records": 28,
+      "ok": 28,
+      "errors": 0,
+      "retried_requests": 0,
+      "unresolved_requests": 0
+    },
+    "smoke": {
+      "first_utc": "2026-10-09T17:52:54.153+00:00",
+      "last_utc": "2026-10-09T23:00:22.832+00:00",
+      "records": 6,
+      "ok": 6,
+      "errors": 0,
+      "retried_requests": 0,
+      "unresolved_requests": 0
+    }
+  },
+  "models": {},
+  "results": {
+    "dev_cot_ru.jsonl": {
+      "rows": 2,
+      "errors": 0,
+      "parse_ok": 2,
+      "models": [
+        "qwen3-8b"
+      ],
+      "prompt_version": [
+        "v1"
+      ]
+    },
+    "dev_followup_doubt_ru.jsonl": {
+      "rows": 3,
+      "errors": 0,
+      "parse_ok": 3,
+      "models": [
+        "qwen3-8b"
+      ],
+      "prompt_version": [
+        "v1"
+      ]
+    },
+    "dev_ru.jsonl": {
+      "rows": 5,
+      "errors": 0,
+      "parse_ok": 5,
+      "models": [
+        "qwen3-8b"
+      ],
+      "prompt_version": [
+        "v1"
+      ]
+    },
+    "dev_typeE_llm.jsonl": {
+      "rows": 18,
+      "errors": 0,
+      "parse_ok": 18,
+      "models": [
+        "qwen3-8b"
+      ],
+      "prompt_version": [
+        "v1"
+      ]
+    }
+  },
+  "d_exec": null,
+  "environment": {
+    "python": "3.12.14",
+    "platform": "macOS-26.6.2-arm64-arm-64bit",
+    "packages": {
+      "openai": "3.27.0",
+      "gigachat": "0.2.3",
+      "httpx": "0.28.1",
+      "scikit-learn": "1.9.1",
+      "numpy": "2.5.3",
+      "pandas": "3.0.6",
+      "scipy": "1.18.1",
+      "statsmodels": "0.15.0"
+    },
+    "requirements_sha256": "a76e2dd1684627201dfca0192ceb014925e4b9b6400832f28f6f6898c39fd8b3"
+  },
   "ollama_server": {
     "hostname": "DESKTOP-GM9R4PJ",
     "os": "Майкрософт Windows 10 Pro 10.0.19045",

@@ -277,7 +277,7 @@ def main(argv=None) -> int:
         return 2
     tasks = run_bank.select_tasks(bank.load_tasks(bank_path), None, args.limit)
     n_errors = sum(run_mode(m, tasks, models, cfg, args.demo, args.dev) for m in modes)
-    return 1 if n_errors else 0
+    return run_bank.EXIT_TECH_ERRORS if n_errors else 0
 
 
 if __name__ == "__main__":

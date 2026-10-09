@@ -157,7 +157,7 @@ def main(argv=None) -> int:
     path = results_path(experiment, args.demo)
     run_bank.write_results(path, result_rows, key=row_key)
     print(f"  таблица: {run_bank.show(path)}")
-    return 1 if run_bank.count_errors(result_rows) else 0
+    return run_bank.EXIT_TECH_ERRORS if run_bank.count_errors(result_rows) else 0
 
 
 if __name__ == "__main__":

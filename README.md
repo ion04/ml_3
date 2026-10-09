@@ -103,12 +103,15 @@ ollama pull qwen3:8b
    .venv/bin/python -m src.run_bank --experiment dev                 # отладка промпта на data/tasks_dev.jsonl
    .venv/bin/python -m src.run_extra [selected | all | cot selfconsistency followup_doubt paraphrase lang_en verbal_formula] [--demo]
    .venv/bin/python -m src.run_extra cot followup_doubt --dev        # проверка режимов на dev-задачах (experiment=dev)
-   .venv/bin/python -m src.exec_code [--experiment main] [--demo]    # запуск кода из ответов типа D
+   .venv/bin/python -m src.exec_code [--experiment main[,paraphrase]] [--demo]   # запуск кода из ответов типа D
+   .venv/bin/python -m src.manifest [--demo]                         # паспорт прогонов → results/run_manifest.json
    ```
    - `run_bank` → `results/<experiment>_<lang>.jsonl`: одна строка на ответ (разбор парсером, автооценка, `call_id` для связи с журналом). Оценочный прогон не стартует, пока банк не проходит `validate --final`, гипотезы не закоммичены (те же проверки, что в G1) и промпт не заморожен (`prompt_version` и `prompt_hash` в `config/experiment.json`).
    - `run_extra` без аргументов запускает режимы для гипотез из `config/experiment.json`: H2 `verbal_formula`, H4 `lang_en`, H6 `cot`, H7 `selfconsistency` (+ `selfconsistency_vote_<lang>.jsonl`), H8 `paraphrase`, H9 `followup_doubt` (только задачи, верно решённые в main). H1, H3, H5, H10–H13 считаются из main и типа E. Типы задач для режимов: `config/experiment.json` → `extra_runs`.
    - `exec_code` → код (не исправляется, снимается только общий отступ блока) в `results/d_code/<model>/<task>.py`, запуск во временной папке (таймаут 300 с, окружение без ключей), итоги и pass@1 в `results/d_exec.jsonl`.
    - Повторный запуск не делает новых вызовов (кэш журнала); дозапрашиваются только вызовы с технической ошибкой. Параллельность: GigaChat и Ollama по 1 потоку, OpenAI-совместимые по 3.
+   - Код выхода прогонщиков: 0 — всё получено; 1 — прогон не запущен (не пройдены проверки); 2 — нет моделей или неверные аргументы; 3 — остались вызовы с технической ошибкой (сеть, 429, 5xx). На коде 3 `run_experiments.sh` ждёт 60 с и повторяет команду (до 3 запусков); содержательно плохие ответы не перезапрашиваются — они уже в кэше.
+   - `src.manifest` пересобирает `results/run_manifest.json` по журналу и таблицам: даты и число вызовов/ошибок по экспериментам, по моделям `model_requested`/`model_reported`/параметры/температуры/токены, версия и отпечаток промпта, параметры эксперимента, гипотезы и хэш их коммита, строки/ошибки/parse_ok каждой таблицы, запуски кода D, версии пакетов и sha256 `requirements.txt`. Раздел `ollama_server` (`src.server_info`) сохраняется.
 6. Тип E (AI4I 2020; данные и решения по разбиению — `data/README.md`):
    ```bash
    .venv/bin/python -m src.typeE all            # download → split → classical (вызовов LLM нет)

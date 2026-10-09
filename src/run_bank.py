@@ -42,6 +42,10 @@ EXPERIMENT_PATH = ROOT / "config" / "experiment.json"
 # Сколько запросов одновременно отправлять одному сервису (провайдер + base_url).
 # GigaChat для физлиц обрабатывает запросы в один поток; локальная модель одна на GPU, и параллельные
 # запросы исказили бы замер задержки и памяти. Можно переопределить полем max_workers в config/models.json.
+# Код выхода «остались вызовы с технической ошибкой» (сеть, 429, 5xx). По нему scripts/run_experiments.sh
+# повторяет команду: дозапрашиваются только такие вызовы. Код 1 — прогон не запущен (не пройдены проверки).
+EXIT_TECH_ERRORS = 3
+
 WORKERS = {"gigachat": 1, "openai_compat": 3, "ollama": 1, "mock": 4}
 
 # Поля задачи, которые копируются в каждую строку результатов (для анализа без повторного чтения банка).
@@ -344,7 +348,7 @@ def main(argv=None) -> int:
         write_results(path, rows)
         print(f"  таблица: {show(path)}")
         n_errors += count_errors(rows)
-    return 1 if n_errors else 0
+    return EXIT_TECH_ERRORS if n_errors else 0
 
 
 if __name__ == "__main__":

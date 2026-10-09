@@ -1,7 +1,7 @@
 """Запуск кода из ответов на задачи типа D (шаг 7 хода работы).
 
 Запуск:
-  .venv/bin/python -m src.exec_code [--experiment main] [--lang ru,en] [--demo] [--timeout 300]
+  .venv/bin/python -m src.exec_code [--experiment main[,paraphrase]] [--lang ru,en] [--demo] [--timeout 300]
 
 Что делает для каждого ответа типа D из results/<experiment>_<lang>.jsonl:
 1. Извлекает код из блока ```python (parse.extract_code) и сохраняет его в results/d_code/<model>/<task>.py
@@ -134,7 +134,7 @@ def exec_row(row: dict, task: dict | None, out: Path, timeout_s: int) -> dict:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="Запуск кода из ответов типа D")
-    ap.add_argument("--experiment", default="main")
+    ap.add_argument("--experiment", default="main", help="main или несколько через запятую, например main,paraphrase")
     ap.add_argument("--lang", default=None, help="ru, en или ru,en (по умолчанию все языки, для которых есть таблица)")
     ap.add_argument("--bank", default=None, help="файл задач (по умолчанию data/tasks.jsonl)")
     ap.add_argument("--timeout", type=int, default=TIMEOUT_S)
@@ -142,16 +142,18 @@ def main(argv=None) -> int:
     args = ap.parse_args(argv)
 
     out = run_bank.out_dir(args.demo)
-    langs = run_bank.parse_list(args.lang) or [lang for lang in ("ru", "en")
-                                                if run_bank.results_path(args.experiment, lang, args.demo).exists()]
+    # Пары (эксперимент, язык), для которых есть таблица ответов.
+    tables = [(exp, lang) for exp in run_bank.parse_list(args.experiment)
+              for lang in (run_bank.parse_list(args.lang) or ["ru", "en"])
+              if run_bank.results_path(exp, lang, args.demo).exists()]
     tasks = {t["id"]: t for t in bank.load_tasks(Path(args.bank) if args.bank else bank.BANK_PATH)}
     exec_path = out / "d_exec.jsonl"
     done = {(r["experiment"], r["lang"], r["model_key"], r["task_id"], r["call_id"])
             for r in run_bank.read_jsonl(exec_path)}
 
     todo = []
-    for lang in langs:
-        for row in run_bank.read_jsonl(run_bank.results_path(args.experiment, lang, args.demo)):
+    for exp, lang in tables:
+        for row in run_bank.read_jsonl(run_bank.results_path(exp, lang, args.demo)):
             key = (row["experiment"], row["lang"], row["model_key"], row["task_id"], row["call_id"])
             if row["answer_kind"] == "code" and row["error"] is None and key not in done:
                 todo.append(row)
