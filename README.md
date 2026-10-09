@@ -77,7 +77,13 @@ ollama pull qwen3:8b
    .venv/bin/python -m src.checks hypcommit       # хэш коммита с гипотезами (для отчёта)
    ```
    Гипотезы: справка `docs/hypotheses_guide.md`, шаблон `hypotheses.md`, выбор в `config/experiment.json` → `hypotheses`. Чек-лист методологических ошибок для типа D: `data/checklist_D.md`.
-4. Основной прогон и прогоны под гипотезы: _(шаги 05, 08)_.
-5. Тип E (AI4I 2020): _(шаги 06, 09)_.
-6. Автопроверка и листы слепой проверки: _(шаг 10)_.
-7. Анализ: `analysis.ipynb`, Restart & Run All _(шаг 11)_.
+4. Промпт, парсер и автопроверка (`src/prompts.py`, `src/parse.py`, `src/grade.py`; проверяются офлайн):
+   ```bash
+   .venv/bin/python -m src.prompts dev-A1 --variant cot --lang en   # показать system и prompt задачи
+   .venv/bin/python -m pytest tests/test_parse.py tests/test_grade.py tests/test_prompts.py -q
+   ```
+   Формат ответа: последние строки `ОТВЕТ: …` и `УВЕРЕННОСТЬ: 0–100` (`ANSWER:` / `CONFIDENCE:` для EN). Варианты промпта: `base`, `cot` (H6), `paraphrase` (H8), `formula`/`verbal` (H2), `followup_doubt` (H9), `classify_row` (тип E). Автоматически проверяются A, B (вердикт), E и F; C, D и обоснование B оценивают люди вслепую.
+5. Основной прогон и прогоны под гипотезы: _(шаги 05, 08)_.
+6. Тип E (AI4I 2020): _(шаги 06, 09)_.
+7. Автопроверка и листы слепой проверки: _(шаг 10)_.
+8. Анализ: `analysis.ipynb`, Restart & Run All _(шаг 11)_.
