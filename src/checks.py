@@ -2,7 +2,7 @@
 
 Запуск:
   .venv/bin/python -m src.checks g1         # готово ли всё к оценочным прогонам (код 0 = да)
-  .venv/bin/python -m src.checks g2         # ручная проверка (реализует шаг 10, пока заглушка)
+  .venv/bin/python -m src.checks g2         # ручная проверка завершена (код 0 = да)
   .venv/bin/python -m src.checks hypcommit  # хэш и дата коммита с гипотезами (для отчёта)
 
 G1 проверяет:
@@ -13,6 +13,13 @@ G1 проверяет:
   5. в hypotheses.md заполнены прогнозы, файл закоммичен и после коммита не менялся;
   6. в logs/calls.jsonl нет оценочных вызовов раньше коммита гипотез.
      Оценочными считаются все записи, кроме experiment = smoke и dev (отладка промпта).
+
+G2 проверяет:
+  1–2. grading/sheet_r1.csv и sheet_r2.csv заполнены полностью: строки совпадают с ключом
+       grading/key_DO_NOT_OPEN.csv, в B и C стоит балл 0/1/2, в D — пункты чек-листа 1/0/н/п
+       и корректность 1/0 там, где её не поставила автопроверка (клетки «—» заполнять не нужно);
+  3. grading/parser_spotcheck.csv: не меньше 20 строк, в каждой human_agrees = да/нет;
+  4. config/pricing.json: verified_by_human = true, у каждой включённой модели есть цена.
 """
 
 import json
@@ -28,6 +35,8 @@ ROOT = Path(__file__).resolve().parent.parent
 HYPOTHESES_MD = ROOT / "hypotheses.md"
 EXPERIMENT_PATH = ROOT / "config" / "experiment.json"
 LOG_PATH = ROOT / "logs" / "calls.jsonl"
+GRADING_DIR = ROOT / "grading"
+PRICING_PATH = ROOT / "config" / "pricing.json"
 
 # Группы гипотез из задания ЛР3.
 HYPOTHESIS_GROUPS = {"H1": 1, "H2": 1, "H3": 1,
@@ -222,9 +231,132 @@ def g1() -> int:
     return 0
 
 
-def g2() -> int:
-    print("Проверка G2 ещё не реализована (её добавит шаг 10: листы проверки, spotcheck, тарифы).")
-    return 1
+# ---------- G2: листы ручной проверки, выборка парсера, тарифы ----------
+
+# src.autograde и src.blind импортируются внутри функций: они импортируют run_bank, а run_bank — этот модуль.
+
+AGREE_VALUES = {"да", "нет"}
+
+
+def _show(path: Path) -> str:
+    path = Path(path).resolve()
+    return str(path.relative_to(ROOT)) if path.is_relative_to(ROOT) else str(path)
+
+
+def norm(value: str) -> str:
+    """Значение клетки к единому виду: «2.0» и «2,0» → «2», «Н/П», «n/a» → «н/п»."""
+    v = (value or "").strip().lower().replace(",", ".")
+    if v in ("н/п", "нп", "n/a", "na"):
+        return "н/п"
+    try:
+        f = float(v)
+        return str(int(f)) if f.is_integer() else v
+    except ValueError:
+        return v
+
+
+def check_sheet(path: Path, key: list[dict]) -> list[str]:
+    """Полнота одного листа. Обязательные клетки каждой строки записаны в ключе (столбец required),
+    поэтому «—», поставленное проверяющим в обязательную клетку, считается незаполненным."""
+    from src import autograde, blind
+    if not path.exists():
+        return [f"нет файла {_show(path)}"]
+    rows = {r.get("item_id", ""): r for r in autograde.read_csv(path)}
+    problems = []
+    if sorted(rows) != sorted(k["item_id"] for k in key):
+        problems.append("строки листа не совпадают с ключом (удалены, добавлены или изменены item_id) — "
+                        "восстановите лист из копии или пересоздайте: .venv/bin/python -m src.blind --force")
+    stale = [k["item_id"] for k in key
+             if k["item_id"] in rows and blind.answer_sha(rows[k["item_id"]].get("answer_text", "")) != k["answer_sha"]]
+    if stale:
+        problems.append(f"текст ответа не совпадает с ключом в {len(stale)} строках (первые: {', '.join(stale[:5])}): "
+                        "лист от другого набора ответов или текст правили")
+    allowed = {blind.SCORE_COL: {"0", "1", "2"}, blind.CORRECT_COL: {"0", "1"},
+               **{c: {"0", "1", "н/п"} for c in blind.CHECKLIST}}
+    empty, bad = [], []
+    for k in key:
+        row = rows.get(k["item_id"], {})
+        for col in filter(None, k["required"].split(";")):
+            raw = row.get(col, "").strip()
+            if raw in ("", blind.NA):
+                empty.append(f"{k['item_id']}:{col}")
+            elif norm(raw) not in allowed[col]:
+                bad.append(f"{k['item_id']}:{col}={raw!r}")
+    if empty:
+        problems.append(f"не заполнено клеток: {len(empty)} (первые: {', '.join(empty[:5])})")
+    if bad:
+        problems.append(f"недопустимые значения: {len(bad)} (первые: {', '.join(bad[:5])}); "
+                        "балл B/C — 0/1/2, чек-лист D — 1/0/н/п, корректность D — 1/0")
+    return problems
+
+
+def check_spotcheck(path: Path, min_rows: int = 20) -> list[str]:
+    from src import autograde
+    if not path.exists():
+        return [f"нет файла {_show(path)} (создаёт .venv/bin/python -m src.autograde)"]
+    rows = autograde.read_csv(path)
+    problems = [] if len(rows) >= min_rows else [f"строк {len(rows)}, нужно не меньше {min_rows}"]
+    empty = [r.get("spot_id") for r in rows if not (r.get("human_agrees") or "").strip()]
+    bad = [r.get("spot_id") for r in rows
+           if (r.get("human_agrees") or "").strip() and norm(r["human_agrees"]) not in AGREE_VALUES]
+    if empty:
+        problems.append(f"human_agrees не заполнен: {', '.join(empty[:10])}" + (" …" if len(empty) > 10 else ""))
+    if bad:
+        problems.append(f"human_agrees должен быть «да» или «нет»: {', '.join(bad[:10])}")
+    return problems
+
+
+def check_pricing(path: Path, models: dict) -> list[str]:
+    if not path.exists():
+        return [f"нет файла {_show(path)}"]
+    pricing = json.loads(path.read_text(encoding="utf-8"))
+    problems = []
+    if pricing.get("verified_by_human") is not True:
+        problems.append("verified_by_human не true: сверьте цены с официальными страницами (source_url) и поставьте true")
+    for cfg in models.values():
+        if cfg["enabled"] and cfg["provider"] != "mock":
+            price = pricing.get("models", {}).get(cfg["key"]) or {}
+            if price.get("rub_per_1m_in") is None or price.get("rub_per_1m_out") is None:
+                problems.append(f"{cfg['key']}: нет цены rub_per_1m_in / rub_per_1m_out")
+    return problems
+
+
+def g2(grading_dir: Path = None, pricing_path: Path = None) -> int:
+    from src import autograde, blind
+    grading_dir = grading_dir or GRADING_DIR
+    pricing_path = pricing_path or PRICING_PATH
+    key_path = grading_dir / blind.KEY_NAME
+    results = []
+    if key_path.exists():
+        key = autograde.read_csv(key_path)
+        for name in blind.SHEETS:
+            results.append((f"лист {name} заполнен полностью", check_sheet(grading_dir / name, key)))
+    else:
+        results.append(("листы слепой проверки созданы", [f"нет {_show(key_path)}: листы ещё не созданы "
+                                                          "(.venv/bin/python -m src.blind после прогонов)"]))
+    results.append(("выборочная проверка парсера заполнена",
+                     check_spotcheck(grading_dir / autograde.SPOTCHECK_NAME)))
+    results.append(("тарифы проверены человеком (config/pricing.json)", check_pricing(pricing_path, llm.load_models())))
+
+    print("Гейт G2 — ручная проверка\n")
+    for title, problems in results:
+        print(("  ✓ " if not problems else "  ✗ ") + title)
+        for p in problems:
+            print("      - " + p)
+    # Совпадение двух листов во всех оценках подозрительно: проверка должна быть независимой.
+    sheets = [grading_dir / name for name in blind.SHEETS]
+    if all(p.exists() for p in sheets):
+        r1, r2 = (sorted(autograde.read_csv(p), key=lambda r: r["item_id"]) for p in sheets)
+        grades1 = [[r.get(c, "") for c in blind.GRADE_COLUMNS] for r in r1]
+        grades2 = [[r.get(c, "") for c in blind.GRADE_COLUMNS] for r in r2]
+        if grades1 == grades2 and any(c not in ("", blind.NA) for row in grades1 for c in row):
+            print("\n  ВНИМАНИЕ: оценки в sheet_r1 и sheet_r2 совпадают полностью. Проверка точно была независимой?")
+    failed = [t for t, p in results if p]
+    if failed:
+        print(f"\nНе выполнено условий: {len(failed)} из {len(results)}. Что делать — HUMAN_TODO.md, раздел G2.")
+        return 1
+    print("\nВсе условия G2 выполнены.")
+    return 0
 
 
 def hypcommit() -> int:

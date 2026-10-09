@@ -71,7 +71,14 @@ echo "--- 6c. Таблица метрик LLM и классических мод
 $PY -m src.typeE_metrics $DEMO
 
 echo "=== 7. Подготовка проверки: автопроверка, слепые листы ==="
-# (шаг 10 добавит команды)
+# graded_auto.jsonl (A, вердикт B, E, F, корректность метрики D) + grading/parser_spotcheck.csv
+# Код 2 = проверять нечего (нет таблиц или ответов B/C/D) — это не ошибка, идём дальше.
+rc=0; $PY -m src.autograde $DEMO || rc=$?
+if [[ $rc -ne 0 && $rc -ne 2 ]]; then exit $rc; fi
+# grading/sheet_r1.csv, sheet_r2.csv, key_DO_NOT_OPEN.csv. Уже заполняемые листы не перезаписываются;
+# если набор ответов изменился, а оценки есть — код 1 и остановка (решает человек).
+rc=0; $PY -m src.blind $DEMO || rc=$?
+if [[ $rc -ne 0 && $rc -ne 2 ]]; then exit $rc; fi
 
 echo "=== 8. Паспорт прогонов: даты, model_reported, промпт, параметры, вызовы и ошибки ==="
 $PY -m src.manifest $DEMO
