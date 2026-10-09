@@ -274,6 +274,35 @@ def claude_cmd(step: dict) -> list[str]:
             "-n", f"lab3-{step['id']}-{step['slug']}", *EXTRA_ARGS]
 
 
+RATE_LIMIT_RETRIES = 10
+
+
+def run_headless(step: dict, prompt: str) -> tuple[int, float | None]:
+    """Одна headless-сессия. Возвращает (код выхода, время сброса лимита или None, если лимит не мешал)."""
+    log_path = LOG_DIR / f"{step['id']}_{datetime.now():%Y%m%d_%H%M%S}.jsonl"
+    cmd = [*claude_cmd(step), "-p", "--output-format", "stream-json", "--verbose", prompt]
+    reset_at, hit_limit = None, False
+    with open(log_path, "w", encoding="utf-8") as log, subprocess.Popen(
+            cmd, cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1) as proc:
+        for line in proc.stdout:
+            log.write(line)
+            log.flush()
+            render_event(line)
+            try:
+                ev = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            info = ev.get("rate_limit_info") or {}
+            if ev.get("type") == "rate_limit_event" and info.get("status") == "rejected":
+                reset_at = info.get("resetsAt")
+            if ev.get("type") == "result" and ev.get("api_error_status") == 429:
+                hit_limit = True
+    print(dim(f"Полный лог: {log_path.relative_to(ROOT)}"))
+    if hit_limit:
+        return proc.returncode, float(reset_at) if reset_at else time.time() + 15 * 60
+    return proc.returncode, None
+
+
 def exec_step(step: dict, mode: str) -> int:
     """Выполняет шаг в текущем терминале (сюда попадает и новое окно Terminal)."""
     for d in (STATE_DIR, LOG_DIR, CONTEXT_DIR):
@@ -289,16 +318,17 @@ def exec_step(step: dict, mode: str) -> int:
         if interactive:
             code = subprocess.run([*claude_cmd(step), prompt], cwd=ROOT).returncode
         else:
-            log_path = LOG_DIR / f"{step['id']}_{datetime.now():%Y%m%d_%H%M%S}.jsonl"
-            cmd = [*claude_cmd(step), "-p", "--output-format", "stream-json", "--verbose", prompt]
-            with open(log_path, "w", encoding="utf-8") as log, subprocess.Popen(
-                    cmd, cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1) as proc:
-                for line in proc.stdout:
-                    log.write(line)
-                    log.flush()
-                    render_event(line)
-            code = proc.returncode
-            print(dim(f"Полный лог: {log_path.relative_to(ROOT)}"))
+            for attempt in range(1, RATE_LIMIT_RETRIES + 2):
+                code, reset_at = run_headless(step, prompt)
+                if reset_at is None:
+                    break
+                # Упёрлись в лимит подписки Claude: ждём сброса и запускаем шаг заново
+                # (новая сессия увидит уже сделанное по файлам и git).
+                wait_s = max(60, reset_at - time.time() + 60)
+                print(bold(f"Лимит Claude исчерпан. Жду сброса до {datetime.fromtimestamp(reset_at + 60):%H:%M} "
+                           f"(попытка {attempt}/{RATE_LIMIT_RETRIES})."))
+                time.sleep(wait_s)
+                prompt = build_prompt(step, interactive)
     finally:
         running_path(step).unlink(missing_ok=True)
         exit_path(step).write_text(str(code))
