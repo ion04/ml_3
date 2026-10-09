@@ -119,7 +119,9 @@ ollama pull qwen3:8b
    .venv/bin/python -m src.run_classifier --estimate                         # объём прогона, без вызовов
    .venv/bin/python -m src.run_classifier --dev                              # отладка промпта на 6 строках пула (шаг 07)
    .venv/bin/python -m src.run_classifier --models all --shots 0,5,20 --limit 20 [--demo]   # пробный прогон
+   .venv/bin/python -m src.typeE_metrics check --limit 20 [--demo]   # формат пробного прогона (код 4 → вернуться к шагу 07)
    .venv/bin/python -m src.run_classifier --models all --shots 0,5,20 [--demo]              # полный (шаг 09)
+   .venv/bin/python -m src.typeE_metrics [--demo]                    # → results/typeE_metrics.csv
    ```
    - `src.typeE classical` → `results/typeE_classical.csv`: Dummy(most_frequent), LogisticRegression и GaussianNB
      (Pipeline: one-hot для `Type` + StandardScaler) на тех же 5 и 20 примерах, что видит LLM, плюс 20 случайных
@@ -129,5 +131,9 @@ ollama pull qwen3:8b
    - `src.run_classifier` → `results/typeE_llm.jsonl` (dev: `results/dev_typeE_llm.jsonl`): одна строка на ответ
      (`shots`, `row_idx`, `y_true`, `value` 1/0, `correct`, `confidence`, `call_id`). Ответ модели: `ОТВЕТ: отказ | нет отказа`.
      Оценочный прогон не стартует, пока гипотезы не закоммичены и промпт не заморожен.
+   - `src.typeE_metrics` → `results/typeE_metrics.csv`: одна строка на LLM × число примеров и на классическую модель
+     (fixed, среднее и sd по resample, константа на test и на всём датасете). Колонки: F1 «отказа», balanced accuracy,
+     accuracy, precision/recall, матрица ошибок, `coverage` и метрики `*_answered` (только ответы 0/1), неответы,
+     техошибки, `complete`, токены, задержка. Неответ в основных метриках = ошибка. Только числа, без выводов.
 7. Автопроверка и листы слепой проверки: _(шаг 10)_.
 8. Анализ: `analysis.ipynb`, Restart & Run All _(шаг 11)_.

@@ -62,8 +62,13 @@ echo "=== 6. Тип E: LLM-классификатор AI4I ==="
 $PY -m src.typeE classical
 echo "--- 6a. Пробный прогон: 20 строк теста × 0/5/20 примеров ---"
 with_retries $PY -m src.run_classifier --models all --shots 0,5,20 --limit 20 $DEMO
+# Формат ответов пробного прогона: код 4, если parse_ok < 90% хоть в одной группе модель × примеры.
+# Тогда скрипт останавливается: промпт правится только на dev (шаг 07), не здесь.
+$PY -m src.typeE_metrics check --limit 20 $DEMO
 echo "--- 6b. Полный прогон: 200 строк (первые 20 возьмутся из кэша) ---"
 with_retries $PY -m src.run_classifier --models all --shots 0,5,20 $DEMO
+echo "--- 6c. Таблица метрик LLM и классических моделей: typeE_metrics.csv ---"
+$PY -m src.typeE_metrics $DEMO
 
 echo "=== 7. Подготовка проверки: автопроверка, слепые листы ==="
 # (шаг 10 добавит команды)
