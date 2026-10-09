@@ -20,12 +20,14 @@
   - получить API-ключ и `folder_id`;
   - активировать стартовый грант.
   Всё вписать в `.env`.
-- [ ] Получить ключ для большой зарубежной или открытой модели (DeepSeek или Qwen) и вписать в `.env`.
+- [ ] Получить ключ для большой зарубежной или открытой модели (DeepSeek или Qwen) и вписать в `.env`. (шаг 02) Внимание: `deepseek-chat` снят с поддержки 2026-07-24, в конфиге по умолчанию `deepseek-v4-pro`; DeepSeek требует пополненного баланса.
 - [ ] (шаг 01) Создать `.env` из шаблона: `cp .env.example .env`, затем вписать ключи. Комментарии в `.env.example` объясняют, где взять каждый ключ — проверка: `git status` не показывает `.env`, а `.venv/bin/python -c "from dotenv import dotenv_values; print(sorted(k for k,v in dotenv_values('.env').items() if v))"` печатает имена заполненных переменных (без значений).
 - [ ] (шаг 01) GigaChat и TLS: скачать корневой сертификат НУЦ Минцифры (https://www.gosuslugi.ru/crt) и указать путь в `GIGACHAT_CA_BUNDLE_FILE`. Альтернатива: `GIGACHAT_VERIFY_SSL_CERTS=False`, но тогда это нужно указать в ограничениях отчёта — проверка: smoke-тест GigaChat проходит без SSL-ошибки.
 - [x] (шаг 01) Ollama установлен (`brew install ollama`), сервис запущен (`brew services start ollama`), модель `qwen3:8b` скачана — проверка: `ollama list` показывает `qwen3:8b`.
 - [ ] Проверить и при необходимости поправить состав 4 моделей и их точные идентификаторы в `config/models.json`.
-- [ ] Запустить `.venv/bin/python -m src.smoke_test`. Все 4 модели должны ответить.
+- [ ] (шаг 02) Подтвердить выбор моделей по умолчанию в `config/models.json` (поле `enabled`): ru1 `GigaChat-2-Max`, ru2 `yandexgpt-5.1` (YandexGPT Pro 5.1, явный URI вместо `yandexgpt/latest`), big `deepseek-v4-pro` (рассуждения выключены), local `qwen3:8b` (`think=false`). Отключённые альтернативы: `gigachat-3-ultra`, `gigachat-2-lite` (PDF советует две версии GigaChat), `aliceai-llm`, `deepseek-flash` (дешевле); `qwen3-8b-think` — только для H6. Решение записать в `flow/HUMAN_NOTES.md` — проверка: в `config/models.json` ровно по одной включённой модели на роли ru1/ru2/big/local (или осознанно больше), `.venv/bin/python -m pytest tests/test_llm.py` зелёный.
+- [ ] (шаг 02) Yandex: если smoke-тест даёт 400/404 на `gpt://<folder_id>/yandexgpt-5.1`, сверить URI модели и endpoint (`https://ai.api.cloud.yandex.net/v1`) со страницей моделей Yandex AI Studio (aistudio.yandex.ru/docs/ru/ai-studio/concepts/generation/models) и поправить `config/models.json` — проверка: строка yandex в smoke-тесте `ok`.
+- [ ] Запустить `.venv/bin/python -m src.smoke_test`. Все 4 модели должны ответить. (шаг 02) Код выхода 0 только если ответили все; модели без ключей помечаются «нет переменных: …» и не вызываются. Локальная `qwen3-8b` уже отвечает (проверено 2026-10-09) — проверка: таблица со всеми `ok`, `echo $?` → 0; заодно записать в отчёт столбец `model_reported` и дату.
 
 **Команда**
 - [ ] Найти второго проверяющего для слепой проверки типов B, C и D. Сделать это нужно заранее, проверка понадобится на G2.
