@@ -1,0 +1,17 @@
+# Окружение и секреты
+.venv/
+.env
+
+# Демо-результаты на mock/синтетике (не являются результатами эксперимента)
+demo/
+
+# Кэш Python и инструментов
+__pycache__/
+*.pyc
+.pytest_cache/
+.ipynb_checkpoints/
+.DS_Store
+
+# Служебные файлы агентского флоу
+flow/state/
+flow/logs/
