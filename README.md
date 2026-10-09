@@ -66,7 +66,17 @@ ollama pull qwen3:8b
    .venv/bin/python -m src.smoke_test
    ```
    Все вызовы LLM идут через `src/llm.py::ask` и сразу дописываются в `logs/calls.jsonl` (вызовы mock-моделей пишутся в `demo/calls.jsonl`). Повторный запуск с теми же входами берёт ответ из журнала (кэш) и API не вызывает.
-3. Проверка банка задач: _(шаг 03)_.
+3. Банк задач и гипотезы (`data/tasks.jsonl`, 38 задач; `data/tasks_dev.jsonl`, 5 задач для отладки промпта; схема полей описана в docstring `src/bank.py`):
+   ```bash
+   .venv/bin/python -m src.bank validate          # схема + список незаполненного
+   .venv/bin/python -m src.bank validate --final  # строгая проверка перед прогонами
+   .venv/bin/python -m src.bank stats             # таблица «тип × тема» для отчёта
+   .venv/bin/python -m src.bank refs [--write]    # пересчитать эталоны кодом (data/refs/, data/d_reference/);
+                                                  # --write записывает reference_metric задач D
+   .venv/bin/python -m src.checks g1              # гейт G1: ключи, smoke, банк, гипотезы закоммичены до прогонов
+   .venv/bin/python -m src.checks hypcommit       # хэш коммита с гипотезами (для отчёта)
+   ```
+   Гипотезы: справка `docs/hypotheses_guide.md`, шаблон `hypotheses.md`, выбор в `config/experiment.json` → `hypotheses`. Чек-лист методологических ошибок для типа D: `data/checklist_D.md`.
 4. Основной прогон и прогоны под гипотезы: _(шаги 05, 08)_.
 5. Тип E (AI4I 2020): _(шаги 06, 09)_.
 6. Автопроверка и листы слепой проверки: _(шаг 10)_.

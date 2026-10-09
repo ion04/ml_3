@@ -1,0 +1,20 @@
+{
+  "_comment": "Настройки эксперимента ЛР3. hypotheses заполняет человек (3 гипотезы из разных групп, см. docs/hypotheses_guide.md) и коммитит вместе с hypotheses.md ДО оценочных прогонов. Своя гипотеза: добавить её группу в custom_hypothesis_groups, например {\"H14\": 3}.",
+  "hypotheses": [],
+  "custom_hypothesis_groups": {},
+  "temperature_main": 0,
+  "sc_repeats": 5,
+  "sc_temperature": 0.7,
+  "languages": ["ru"],
+  "seed": 42,
+  "bootstrap_n": 1000,
+  "prompt_version": null,
+  "typeE": {
+    "_comment": "Заполнит шаг 06. Значения ниже — умолчания из flow/HUMAN_NOTES.md (ожидают решения человека).",
+    "dataset": "AI4I 2020 (UCI id 601)",
+    "test_mode": "enriched",
+    "n_test": 200,
+    "n_test_failures": 40,
+    "shots": [0, 5, 20]
+  }
+}
