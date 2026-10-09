@@ -47,8 +47,10 @@
     }
   },
   "typeE": {
-    "_comment": "Заполнит шаг 06. Значения ниже — умолчания из flow/HUMAN_NOTES.md (ожидают решения человека).",
+    "_comment": "Тип E (шаг 06), используется src/typeE.py и src/run_classifier.py; seed — общий (поле seed). test_mode: enriched (n_test_failures отказов в тесте) или natural (естественная доля, ~7 из 200) — ожидает решения человека (flow/HUMAN_NOTES.md). shot_failures: сколько отказов в наборе few-shot данного размера; наборы вложенные (5 ⊂ 20). n_resamples: число случайных стратифицированных наборов для разброса LogReg/NB (без API). n_dev_rows: строки пула для отладки промпта (experiment=dev). После изменения параметров: .venv/bin/python -m src.typeE split && .venv/bin/python -m src.typeE classical (только до LLM-прогонов типа E).",
     "dataset": "AI4I 2020 (UCI id 601)",
+    "data_file": "data/ai4i2020.csv",
+    "split_file": "data/e_split.json",
     "test_mode": "enriched",
     "n_test": 200,
     "n_test_failures": 40,
@@ -56,6 +58,12 @@
       0,
       5,
       20
-    ]
+    ],
+    "shot_failures": {
+      "5": 2,
+      "20": 5
+    },
+    "n_resamples": 20,
+    "n_dev_rows": 6
   }
 }

@@ -171,22 +171,28 @@ def eval_problems(experiment: str, bank_path: Path) -> list[str]:
     # Те же проверки гипотез, что в гейте G1: 3 гипотезы из разных групп, прогнозы заполнены и закоммичены.
     problems += checks.check_hypotheses_config(cfg)
     problems += checks.check_hypotheses_committed(cfg)[0]
-    # Промпт заморожен на шаге 07: версия и отпечаток текстов совпадают с записанными при заморозке.
-    if cfg.get("prompt_version") != prompts.PROMPT_VERSION or cfg.get("prompt_hash") != prompts.prompt_hash():
-        problems.append(f"промпт не заморожен или изменён после заморозки: в config/experiment.json "
-                        f"prompt_version={cfg.get('prompt_version')!r}, prompt_hash={cfg.get('prompt_hash')!r}; "
-                        f"в src/prompts.py {prompts.PROMPT_VERSION!r}, {prompts.prompt_hash()!r} (заморозка — шаг 07)")
+    problems += prompt_problems(cfg)
     return problems
+
+
+def prompt_problems(cfg: dict) -> list[str]:
+    """Промпт заморожен на шаге 07: версия и отпечаток текстов совпадают с записанными при заморозке."""
+    if cfg.get("prompt_version") != prompts.PROMPT_VERSION or cfg.get("prompt_hash") != prompts.prompt_hash():
+        return [f"промпт не заморожен или изменён после заморозки: в config/experiment.json "
+                f"prompt_version={cfg.get('prompt_version')!r}, prompt_hash={cfg.get('prompt_hash')!r}; "
+                f"в src/prompts.py {prompts.PROMPT_VERSION!r}, {prompts.prompt_hash()!r} (заморозка — шаг 07)"]
+    return []
 
 
 # ---------- Один вызов → одна строка результатов ----------
 
 def make_job(task, model_key, experiment, lang, variant="base", temperature=0.0, repeat=0,
-             history=None, extra=None) -> dict:
-    """Описание одного вызова. extra — дополнительные поля для строки результатов."""
+             history=None, extra=None, meta=None) -> dict:
+    """Описание одного вызова. extra — дополнительные поля для строки результатов,
+    meta — дополнительные поля meta в журнале (тип E: shots, row_idx)."""
     return {"task": task, "model_key": model_key, "experiment": experiment, "lang": lang,
             "variant": variant, "temperature": temperature, "repeat": repeat,
-            "history": history, "extra": extra or {}}
+            "history": history, "extra": extra or {}, "meta": meta or {}}
 
 
 def make_row(job: dict, res: llm.LLMResult) -> dict:
@@ -220,7 +226,8 @@ def run_job(job: dict, log: Path) -> tuple[llm.LLMResult, dict]:
     task = job["task"]
     system, prompt = prompts.build_messages(task, job["variant"], job["lang"])
     meta = {"task_id": task["id"], "type": task["type"], "variant": job["variant"],
-            "experiment": job["experiment"], "lang": job["lang"], "prompt_version": prompts.PROMPT_VERSION}
+            "experiment": job["experiment"], "lang": job["lang"], "prompt_version": prompts.PROMPT_VERSION,
+            **job.get("meta", {})}
     res = llm.ask(job["model_key"], prompt, job["temperature"], system=system, history=job["history"],
                   meta=meta, repeat=job["repeat"], log_path=log)
     return res, make_row(job, res)
@@ -272,13 +279,14 @@ def read_jsonl(path: Path) -> list[dict]:
         return [json.loads(line) for line in f if line.strip()]
 
 
-def write_results(path: Path, rows: list[dict]) -> None:
+def write_results(path: Path, rows: list[dict], key=row_key) -> None:
     """Обновляет таблицу: строки с тем же ключом заменяются, новые добавляются в конец.
     Таблица производная (её всегда можно пересобрать из журнала), поэтому файл переписывается целиком.
-    Так частичные прогоны (--types, --limit) не стирают строки, посчитанные раньше."""
-    table = {row_key(r): r for r in read_jsonl(path)}
+    Так частичные прогоны (--types, --limit) не стирают строки, посчитанные раньше.
+    key — функция «строка → ключ» (у типа E в ключе ещё и число примеров shots)."""
+    table = {key(r): r for r in read_jsonl(path)}
     for r in rows:
-        table[row_key(r)] = r
+        table[key(r)] = r
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         for r in table.values():

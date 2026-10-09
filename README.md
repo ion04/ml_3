@@ -98,6 +98,22 @@ ollama pull qwen3:8b
    - `run_extra` без аргументов запускает режимы для гипотез из `config/experiment.json`: H2 `verbal_formula`, H4 `lang_en`, H6 `cot`, H7 `selfconsistency` (+ `selfconsistency_vote_<lang>.jsonl`), H8 `paraphrase`, H9 `followup_doubt` (только задачи, верно решённые в main). H1, H3, H5, H10–H13 считаются из main и типа E. Типы задач для режимов: `config/experiment.json` → `extra_runs`.
    - `exec_code` → код (не исправляется, снимается только общий отступ блока) в `results/d_code/<model>/<task>.py`, запуск во временной папке (таймаут 300 с, окружение без ключей), итоги и pass@1 в `results/d_exec.jsonl`.
    - Повторный запуск не делает новых вызовов (кэш журнала); дозапрашиваются только вызовы с технической ошибкой. Параллельность: GigaChat и Ollama по 1 потоку, OpenAI-совместимые по 3.
-6. Тип E (AI4I 2020): _(шаги 06, 09)_.
+6. Тип E (AI4I 2020; данные и решения по разбиению — `data/README.md`):
+   ```bash
+   .venv/bin/python -m src.typeE all            # download → split → classical (вызовов LLM нет)
+   .venv/bin/python -m src.typeE show 0         # строка датасета текстом (ru/en), как её видит модель
+   .venv/bin/python -m src.run_classifier --estimate                         # объём прогона, без вызовов
+   .venv/bin/python -m src.run_classifier --dev                              # отладка промпта на 6 строках пула (шаг 07)
+   .venv/bin/python -m src.run_classifier --models all --shots 0,5,20 --limit 20 [--demo]   # пробный прогон
+   .venv/bin/python -m src.run_classifier --models all --shots 0,5,20 [--demo]              # полный (шаг 09)
+   ```
+   - `src.typeE classical` → `results/typeE_classical.csv`: Dummy(most_frequent), LogisticRegression и GaussianNB
+     (Pipeline: one-hot для `Type` + StandardScaler) на тех же 5 и 20 примерах, что видит LLM, плюс 20 случайных
+     стратифицированных наборов для разброса LogReg/NB. Метрики: F1 класса «отказ», balanced accuracy, accuracy,
+     precision/recall, матрица ошибок; `eval_set`: `test` (200 строк), `natural` (все строки вне обучения),
+     `full` (константа «нет отказа» на всём датасете — accuracy при естественной доле отказов).
+   - `src.run_classifier` → `results/typeE_llm.jsonl` (dev: `results/dev_typeE_llm.jsonl`): одна строка на ответ
+     (`shots`, `row_idx`, `y_true`, `value` 1/0, `correct`, `confidence`, `call_id`). Ответ модели: `ОТВЕТ: отказ | нет отказа`.
+     Оценочный прогон не стартует, пока гипотезы не закоммичены и промпт не заморожен.
 7. Автопроверка и листы слепой проверки: _(шаг 10)_.
 8. Анализ: `analysis.ipynb`, Restart & Run All _(шаг 11)_.

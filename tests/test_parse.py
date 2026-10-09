@@ -366,9 +366,57 @@ def test_code_missing():
     ("ОТВЕТ: отказ", 1),
     ("ANSWER: no failure", 0),
     ("ANSWER: **1**", 1),
+    ("ОТВЕТ: **Нет отказа.**\nУВЕРЕННОСТЬ: 85", 0),
+    ("ОТВЕТ: Отказ (вероятно, из-за перегрева)\nУВЕРЕННОСТЬ: 60", 1),
+    ("ОТВЕТ: отказ маловероятен", 0),
+    ("ОТВЕТ: отказа не будет", 0),
+    ("ОТВЕТ: станок не откажет", 0),
+    ("ANSWER: Failure\nCONFIDENCE: 70", 1),
+    ("ANSWER: No failure.", 0),
+    ("ANSWER: failure is unlikely", 0),
+    ("Крутящий момент высокий, износ большой.\nОТВЕТ: отказ\nУВЕРЕННОСТЬ: 75", 1),
 ])
 def test_label(text, expected):
-    assert parse_answer(text, "label", "ru").value == expected
+    r = parse_answer(text, "label", "en" if "ANSWER" in text else "ru")
+    assert r.value == expected and r.parse_ok
+
+
+@pytest.mark.parametrize("text,expected", [
+    # отрицание после слова «отказ» (случаи из ревью субагентом)
+    ("ОТВЕТ: Отказа нет", 0), ("ОТВЕТ: Отказ: нет", 0), ("ОТВЕТ: отказ — нет", 0),
+    ("ОТВЕТ: Отказ оборудования не произойдёт", 0), ("ОТВЕТ: Отказа оборудования не будет", 0),
+    ("ОТВЕТ: отказ не случится", 0), ("ОТВЕТ: отказ не наблюдается", 0), ("ОТВЕТ: отказ отсутствует", 0),
+    ("ОТВЕТ: Отсутствие отказа", 0), ("ОТВЕТ: отказ невозможен", 0), ("ОТВЕТ: не отказ", 0),
+    ("ОТВЕТ: низкая вероятность отказа", 0), ("ОТВЕТ: риск отказа низкий", 0), ("ОТВЕТ: вероятность отказа мала", 0),
+    ("ОТВЕТ: нормальная работа", 0), ("ОТВЕТ: станок откажет", 1), ("ОТВЕТ: отказ не исключён", 1),
+    ("ОТВЕТ: высокая вероятность отказа", 1), ("ОТВЕТ: отказ вероятен", 1),
+    ("ANSWER: unlikely to fail", 0), ("ANSWER: Not a failure", 0), ("ANSWER: failure not expected", 0),
+    ("ANSWER: Failure is not expected", 0), ("ANSWER: failure is not likely", 0),
+    ("ANSWER: The machine is not expected to fail", 0), ("ANSWER: low risk of failure", 0),
+    ("ANSWER: failure probability is low", 0), ("ANSWER: failure: no", 0), ("ANSWER: high risk of failure", 1),
+])
+def test_label_negations(text, expected):
+    r = parse_answer(text, "label", "en" if "ANSWER" in text else "ru")
+    assert r.value == expected and any("не дословная" in n for n in r.notes)
+
+
+@pytest.mark.parametrize("text,expected", [("ОТВЕТ: Нет отказа.", 0), ("ОТВЕТ: «отказ»", 1),
+                                           ("ANSWER: Failure.", 1), ("ОТВЕТ: Исход: нет отказа.", 0)])
+def test_label_exact_has_no_notes(text, expected):
+    r = parse_answer(text, "label", "en" if "ANSWER" in text else "ru")
+    assert r.value == expected and not any("не дословная" in n for n in r.notes)
+
+
+def test_label_first_class_wins():
+    r = parse_answer("ОТВЕТ: отказ (нет сомнений)", "label", "ru")
+    assert r.value == 1 and any("оба класса" in n for n in r.notes)
+
+
+@pytest.mark.parametrize("text", ["ОТВЕТ: отказ | нет отказа", "ОТВЕТ: отказ или нет отказа",
+                                  "ANSWER: failure / no failure"])
+def test_label_template_echo_not_parsed(text):
+    r = parse_answer(text, "label", "en" if "ANSWER" in text else "ru")
+    assert r.value is None and not r.parse_ok
 
 
 # ---------- Случаи из ревью субагентом ----------

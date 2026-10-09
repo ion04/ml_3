@@ -23,7 +23,7 @@
   paraphrase      перефразировка paraphrase_<lang> вместо условия (H8)
   formula, verbal формульная / словесная версия formula_<lang> / verbal_<lang> (H2)
   followup_doubt  второй ход диалога «Мне кажется, ты ошибся.» (H9); историю собирает followup_history()
-  classify_row    тип E: строка AI4I текстом + 0/5/20 примеров (шаблон уточняет шаг 06)
+  classify_row    тип E: строка AI4I текстом + 0/5/20 примеров (см. CLASSIFY и src/typeE.py)
 """
 
 import hashlib
@@ -68,7 +68,7 @@ FORMAT = {
             "Приведи полный код на Python в одном блоке ```python ... ```. Код должен запускаться "
             "без изменений и печатать (print) итоговое значение метрики. В строке ОТВЕТ напиши: код выше"
         ),
-        "label": "В строке ОТВЕТ напиши 1, если будет отказ оборудования, или 0, если отказа не будет.",
+        "label": "В строке ОТВЕТ напиши одно из двух: отказ или нет отказа.",
     },
     "en": {
         "numeric": (
@@ -85,7 +85,7 @@ FORMAT = {
             "Give the complete Python code in a single ```python ... ``` block. The code must run "
             "without changes and print the final metric value. In the ANSWER line write: code above"
         ),
-        "label": "In the ANSWER line write 1 if the machine will fail, or 0 if it will not fail.",
+        "label": "In the ANSWER line write one of two options: failure or no failure.",
     },
 }
 
@@ -96,19 +96,32 @@ COT = {
 
 FOLLOWUP_DOUBT = {"ru": "Мне кажется, ты ошибся.", "en": "I think you made a mistake."}
 
-# Тип E (черновик, шаг 06 подставит свой текст описания строки и при необходимости поправит шаблон).
+# Тип E (шаг 06): строка AI4I 2020 текстом + 0/5/20 примеров с известным исходом.
+# row — шаблон описания станка по образцу из PDF; числа подставляет src/typeE.py::row_text
+# (ru: десятичная запятая и пробел между разрядами, en: точка и запятая между разрядами).
+# labels[y] — как называется класс y (0 = нет отказа, 1 = отказ) в примерах и в строке ОТВЕТ.
+# Название датасета в промпт не пишем, чтобы не подсказывать его прямо. Узнать AI4I по набору признаков
+# и фразе про L/M/H модель всё равно может — это ограничение для отчёта.
 CLASSIFY = {
     "ru": {
-        "intro": "По показаниям датчиков станка определи, произойдёт ли отказ оборудования.",
+        "intro": ("По показаниям датчиков станка определи, произойдёт ли отказ оборудования. "
+                  "Тип изделия L, M или H означает низкое, среднее или высокое качество изделия."),
         "examples": "Примеры с известным исходом:",
-        "example": "{row_text} → {label}",
-        "query": "Станок: {row_text}",
+        "example": "{n}. {row_text} Исход: {label}.",
+        "query": "Определи исход для станка:\n{row_text}",
+        "row": ("Тип изделия: {type}. Температура воздуха {air} K, температура процесса {process} K, "
+                "скорость вращения {speed} об/мин, крутящий момент {torque} Н·м, износ инструмента {wear} мин."),
+        "labels": ["нет отказа", "отказ"],
     },
     "en": {
-        "intro": "Based on the machine sensor readings, decide whether the machine will fail.",
+        "intro": ("Based on the machine sensor readings, decide whether the machine will fail. "
+                  "Product type L, M or H means low, medium or high product quality."),
         "examples": "Examples with known outcome:",
-        "example": "{row_text} → {label}",
-        "query": "Machine: {row_text}",
+        "example": "{n}. {row_text} Outcome: {label}.",
+        "query": "Decide the outcome for this machine:\n{row_text}",
+        "row": ("Product type: {type}. Air temperature {air} K, process temperature {process} K, "
+                "rotational speed {speed} rpm, torque {torque} N·m, tool wear {wear} min."),
+        "labels": ["no failure", "failure"],
     },
 }
 
@@ -137,12 +150,14 @@ def task_text(task: dict, variant: str, lang: str) -> str:
 
 
 def classify_prompt(task: dict, lang: str) -> str:
-    """Тип E: task = {"row_text": текст строки, "shots": [{"row_text": ..., "label": 0|1}, ...]}."""
+    """Тип E: task = {"row_text": текст строки, "shots": [{"row_text": ..., "label": 0|1}, ...]}.
+    Инструкция, примеры (если есть), строка-запрос и требование к формату ответа."""
     t = CLASSIFY[lang]
     parts = [t["intro"]]
     shots = task.get("shots") or []
     if shots:
-        lines = [t["example"].format(row_text=s["row_text"], label=s["label"]) for s in shots]
+        lines = [t["example"].format(n=n, row_text=s["row_text"], label=t["labels"][s["label"]])
+                 for n, s in enumerate(shots, 1)]
         parts.append(t["examples"] + "\n" + "\n".join(lines))
     parts.append(t["query"].format(row_text=task["row_text"]))
     parts.append(FORMAT[lang]["label"])

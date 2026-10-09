@@ -108,11 +108,29 @@ FALSE_RE = re.compile(
 TRUE_RE = re.compile(r"(?<!\w)(?:верн\w*|правильн\w*|истинн\w*|истина|правда|да|true|correct|right|yes)(?!\w)", re.I)
 PARTIAL_RE = re.compile(r"(?<!\w)(?:частично|отчасти|partially|partly)(?!\w)", re.I)
 
-# Метки типа E. «нет отказа» проверяется раньше «отказ».
+# Метки типа E: промпт просит «отказ» / «нет отказа» (failure / no failure); 1/0 тоже понимаем.
+# Сначала проверяется точная метка (LABEL_EXACT). Иначе ищутся фразы «без отказа»: они маскируются, иначе
+# «отказа» внутри «отказа нет» сочлось бы за отказ. «Отказ не исключён» остаётся отказом.
+LABEL_EXACT = {"отказ": 1, "нет отказа": 0, "failure": 1, "no failure": 0, "1": 1, "0": 0}
+_NEG_RU = (r"нет|не\s+(?:будет|произойд\w*|случит\w*|наблюда\w*|ожида\w*|прогнозир\w*|предвид\w*|предполага\w*"
+           r"|возник\w*|вероят\w*)|отсутств\w*|невозмож\w*|маловероят\w*")
+_LOW = r"(?:низк\w*|мал\w*|незначительн\w*|минимальн\w*)"
+_LOW_EN = r"(?:low|small|minimal|negligible)"
 NO_FAIL_RE = re.compile(
-    r"(?<!\w)(?:нет\s+отказа|без\s+отказа|отказа\s+не\s+будет|не\s+будет\s+отказа|отказ\s+не\s+произойд\w*"
-    r"|no\s+failure|will\s+not\s+fail|won't\s+fail|not\s+fail\w*|нет|no|норма|normal)(?!\w)", re.I)
-FAIL_RE = re.compile(r"(?<!\w)(?:отказ\w*|failure|fail\w*|да|yes)(?!\w)", re.I)
+    r"(?<!\w)(?:нет\s+отказа|без\s+отказа|отсутстви\w*\s+отказа|не\s+отказ\w*|не\s+откаж\w*|не\s+будет\s+отказа"
+    rf"|отказ\w*(?:\s+\w+)?\s*(?:[:—–-]\s*)?(?:{_NEG_RU})"                  # «отказа нет», «отказ оборудования не произойдёт»
+    rf"|{_LOW}\s+(?:вероятност\w*|риск\w*)\s+отказа|(?:вероятност\w*|риск\w*)\s+отказа\s+{_LOW}"
+    r"|нормальн\w*\s+работ\w*|норма|нет"
+    r"|no\s+failure|not\s+(?:a\s+)?failure|will\s+not\s+fail|won't\s+fail|not\s+fail\w*"
+    r"|(?:unlikely|not\s+(?:expected|likely|predicted|anticipated))\s+to\s+fail"
+    r"|failure\s*(?:[:—–-]\s*)?(?:is\s+)?(?:not\s+(?:expected|likely|predicted|anticipated)|unlikely|no(?!\w))"
+    rf"|{_LOW_EN}\s+(?:risk|probability|chance|likelihood)\s+of\s+failure"
+    rf"|failure\s+(?:risk|probability|chance|likelihood)\s+(?:is\s+)?{_LOW_EN}"
+    r"|normal(?:\s+operation)?|no)(?!\w)", re.I)
+FAIL_RE = re.compile(r"(?<!\w)(?:отказ\w*|откаж\w*|failure|fail\w*|да|yes)(?!\w)", re.I)
+LABEL_DIGIT_RE = re.compile(r"(?<![\d.,])[01](?![\d.,]*\d)")
+# Модель повторила шаблон из промпта («отказ | нет отказа»), а не выбрала класс.
+LABEL_ECHO_RE = re.compile(r"отказ\s*(?:\||/|или)\s*нет\s+отказа|failure\s*(?:\||/|or)\s*no\s+failure", re.I)
 
 SUPERSCRIPT = str.maketrans("⁰¹²³⁴⁵⁶⁷⁸⁹⁻⁺", "0123456789-+")
 
@@ -278,15 +296,31 @@ def parse_bool(s: str) -> tuple[bool | None, list[str]]:
     return None, []
 
 
-def parse_label(s: str) -> int | None:
-    digits = set(re.findall(r"(?<![\d.,])[01](?![\d.,]*\d)", s))
-    if len(digits) == 1:
-        return int(digits.pop())
-    if NO_FAIL_RE.search(s):
-        return 0
-    if FAIL_RE.search(s):
-        return 1
-    return None
+def parse_label(s: str) -> tuple[int | None, list[str]]:
+    """Класс типа E из строки ответа: 1 = отказ, 0 = нет отказа.
+    Если в строке есть и слово, и цифра («0 — … предсказать отказ»), побеждает то, что стоит раньше:
+    модель сначала называет класс, потом поясняет."""
+    exact = re.sub(r"^(?:исход|outcome)\s*[:：]\s*|[\s.!«»\"'()]+$|^[\s«»\"'(]+", "", s.lower())
+    if exact in LABEL_EXACT:
+        return LABEL_EXACT[exact], []
+    if LABEL_ECHO_RE.search(s):
+        return None, ["в строке ответа повторён шаблон «отказ / нет отказа»"]
+    found = []                                            # (позиция, класс)
+    no_fail = NO_FAIL_RE.search(s)
+    if no_fail:
+        found.append((no_fail.start(), 0))
+    fail = FAIL_RE.search(NO_FAIL_RE.sub(lambda m: " " * len(m.group()), s))
+    if fail:
+        found.append((fail.start(), 1))
+    digit = LABEL_DIGIT_RE.search(s)
+    if digit:
+        found.append((digit.start(), int(digit.group())))
+    if not found:
+        return None, []
+    notes = ["метка не дословная, разобрана по шаблонам фраз"]       # такие ответы смотрит человек (G2)
+    if len({c for _, c in found}) > 1:
+        notes.append("в строке ответа оба класса, взят первый")
+    return min(found)[1], notes
 
 
 def parse_confidence(body: str) -> tuple[float | None, list[str]]:
@@ -374,7 +408,8 @@ def parse_value(s: str, kind: str, lang: str):
         v, notes = parse_bool(clean(s))
         return v, False, notes
     if kind == "label":
-        return parse_label(clean(s)), False, []
+        v, notes = parse_label(clean(s))
+        return v, False, notes
     if kind == "text":
         # Название метода: снимаем только markdown, иначе clean() испортит «L1», «k-means++» и т. п.
         v = re.sub(r"[*_`$]", "", s).strip(" \t\n.;:—-")

@@ -82,7 +82,8 @@ def test_followup_doubt(lang, phrase):
 def test_classify_row():
     t = {"row_text": "Тип L, температура воздуха 300,1 K", "shots": [{"row_text": "Тип M, 298 K", "label": 0}]}
     _, prompt = prompts.build_messages(t, "classify_row", "ru")
-    assert "Тип M, 298 K → 0" in prompt and "300,1 K" in prompt and prompt.endswith(prompts.FORMAT["ru"]["label"])
+    assert "1. Тип M, 298 K Исход: нет отказа." in prompt and "300,1 K" in prompt
+    assert prompt.endswith(prompts.FORMAT["ru"]["label"])
     _, zero = prompts.build_messages({"row_text": "x"}, "classify_row", "ru")
     assert "Примеры" not in zero
 

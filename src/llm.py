@@ -375,13 +375,15 @@ def _call_ollama(cfg, model_id, messages, temperature, max_tokens, repeat):
 MOCK_TEMPLATE = "Демо-ответ mock-модели {model} (сообщений в диалоге: {n_messages}).\nОТВЕТ: {answer}\nУВЕРЕННОСТЬ: {confidence}"
 MOCK_BOOL_TEMPLATE = "Демо-ответ mock-модели {model} (сообщений в диалоге: {n_messages}).\nОТВЕТ: {verdict}\nУВЕРЕННОСТЬ: {confidence}"
 MOCK_CODE_TEMPLATE = "Демо-ответ mock-модели {model}.\n```python\n{code}\n```\nОТВЕТ: код выше\nУВЕРЕННОСТЬ: {confidence}"
+MOCK_LABEL_TEMPLATE = "Демо-ответ mock-модели {model} (сообщений в диалоге: {n_messages}).\nОТВЕТ: {label}\nУВЕРЕННОСТЬ: {confidence}"
 
 
 def _call_mock(cfg, model_id, messages, temperature, max_tokens, repeat):
     """Детерминированный ответ без сети: зависит только от входа (модель, сообщения, T, repeat).
 
     Чтобы демо-прогон проходил все ветки разбора, mock смотрит, что просили в сообщениях пользователя:
-    код (```python) → маленькая программа (каждая 4-я падает), «верно или неверно» → вердикт, иначе число.
+    код (```python) → маленькая программа (каждая 4-я падает), «верно или неверно» → вердикт,
+    классификация типа E («нет отказа» / «no failure») → класс (примерно каждый 5-й — отказ), иначе число.
     params.template в конфиге задаёт свой шаблон и отключает этот выбор.
     """
     seed_text = json.dumps([model_id, messages, temperature, repeat], ensure_ascii=False)
@@ -393,6 +395,8 @@ def _call_mock(cfg, model_id, messages, temperature, max_tokens, repeat):
             template = MOCK_CODE_TEMPLATE
         elif "верно или неверно" in user_text or "true or false" in user_text:
             template = MOCK_BOOL_TEMPLATE
+        elif "нет отказа" in user_text or "no failure" in user_text:
+            template = MOCK_LABEL_TEMPLATE
         else:
             template = MOCK_TEMPLATE
     verdict = ("верно" if n % 2 else "неверно") if "верно или неверно" in user_text else ("true" if n % 2 else "false")
@@ -400,8 +404,12 @@ def _call_mock(cfg, model_id, messages, temperature, max_tokens, repeat):
         code = 'raise RuntimeError("демо: код mock-модели упал")'
     else:
         code = f'print("accuracy: {0.9 + (n % 10) / 100:.4f}")'
+    if "нет отказа" in user_text:
+        label = "отказ" if n % 5 == 0 else "нет отказа"
+    else:
+        label = "failure" if n % 5 == 0 else "no failure"
     text = template.format(model=model_id, n_messages=len(messages), answer=n % 100,
-                           confidence=50 + n % 51, verdict=verdict, code=code)
+                           confidence=50 + n % 51, verdict=verdict, code=code, label=label)
     return {
         "text": text,
         "tokens_in": sum(len(m["content"].split()) for m in messages),

@@ -35,7 +35,12 @@ echo "=== 5. Запуск кода из ответов типа D ==="
 $PY -m src.exec_code --experiment main $DEMO
 
 echo "=== 6. Тип E: LLM-классификатор AI4I ==="
-# (шаг 06 добавит команду src.run_classifier: сначала пробный прогон на 20 строках, потом полный)
+# Данные и разбиение лежат в data/ (ai4i2020.csv, e_split.json); классические модели вызовов не делают.
+$PY -m src.typeE classical
+echo "--- 6a. Пробный прогон: 20 строк теста × 0/5/20 примеров ---"
+$PY -m src.run_classifier --models all --shots 0,5,20 --limit 20 $DEMO
+echo "--- 6b. Полный прогон: 200 строк (первые 20 возьмутся из кэша) ---"
+$PY -m src.run_classifier --models all --shots 0,5,20 $DEMO
 
 echo "=== 7. Подготовка проверки: автопроверка, слепые листы ==="
 # (шаг 10 добавит команды)
