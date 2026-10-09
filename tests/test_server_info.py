@@ -43,3 +43,44 @@ def test_write_manifest_keeps_other_fields(tmp_path):
     server_info.write_manifest({"hostname": "home"}, path)
     data = json.loads(path.read_text(encoding="utf-8"))
     assert data == {"runs": [1, 2], "ollama_server": {"hostname": "home"}}
+
+
+WIN_SAMPLE = """hostname=DESKTOP-X
+os=Windows 10 Pro 10.0.19045
+cpu=AMD Ryzen Threadripper 3970X 32-Core Processor
+cpu_threads=64
+ram_bytes=34224627712
+ram_modules=8 GB 2133 MHz;8 GB 2133 MHz
+gpu=NVIDIA GeForce RTX 3090, 24576 MiB, 591.74
+"""
+
+
+def test_collect_windows(monkeypatch):
+    """Windows-ПК: ОС определяется по `echo %OS%`, скрипт уходит в PowerShell, Ollama — через API."""
+    sent = []
+
+    def fake_ssh(host, command, timeout_s, stdin=None):
+        sent.append(command)
+        return "Windows_NT\r\n" if command == "echo %OS%" else WIN_SAMPLE
+
+    monkeypatch.setattr(server_info, "ssh", fake_ssh)
+    monkeypatch.setattr(server_info, "ollama_api_info",
+                        lambda url: {"ollama_version": "0.40.2", "models": ["qwen3:8b 500a1f067a9f"]})
+    info = server_info.collect("gpu")
+    assert sent[1].startswith("powershell -NoProfile -NonInteractive -EncodedCommand ")
+    assert info["ram_modules"] == ["8 GB 2133 MHz", "8 GB 2133 MHz"] and info["cpu_threads"] == 64
+    assert info["ollama_version"] == "0.40.2" and info["models"] == ["qwen3:8b 500a1f067a9f"]
+    assert info["ssh_host"] == "gpu"
+
+
+def test_collect_linux_uses_bash(monkeypatch):
+    sent = []
+
+    def fake_ssh(host, command, timeout_s, stdin=None):
+        sent.append((command, stdin))
+        return "%OS%\n" if command == "echo %OS%" else SAMPLE
+
+    monkeypatch.setattr(server_info, "ssh", fake_ssh)
+    info = server_info.collect("home")
+    assert sent[1] == ("bash -s", server_info.REMOTE_SCRIPT)
+    assert info["models"] == ["qwen3:8b 500a1f067a9f"] and "ram_modules" not in info

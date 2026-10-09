@@ -1,43 +1,43 @@
 STATUS: deferred
 ## Сделано
-- Smoke 2026-10-10: ответила только qwen3-8b (на ноутбуке); у GigaChat, Yandex и DeepSeek нет ключей в `.env` (`.env` нет).
-- Dev-прогоны на qwen3-8b, промпт v1, experiment=dev, всего 28 вызовов:
-  - `run_bank --experiment dev`: 5 вызовов;
-  - `run_extra cot followup_doubt --dev`: 2 + 3;
-  - `run_classifier --dev`: 6 строк × 0/5/20 = 18.
-  Таблицы `results/dev_ru.jsonl`, `dev_cot_ru`, `dev_followup_doubt_ru`, `dev_typeE_llm`.
-- `src/prompt_debug.py`: по журналу (experiment=dev) заново разбирает ответы и строит таблицы «модель × версия» и «все режимы»: parse_ok, формат, хвост после УВЕРЕННОСТЬ, обрезка, токены; отдельно токены E по числу примеров. `--write` обновляет авто-раздел `docs/prompt_debug.md`. `freeze` записывает prompt_version + prompt_hash в config, но только если у всех включённых моделей есть base-ответы текущей версии на 5 dev-задач (`--force` — обход).
-- `docs/prompt_debug.md`: журнал итераций (v1, только qwen), наблюдения, авто-таблицы.
-- По заметке человека (появилась в HUMAN_NOTES во время шага) добавлена поддержка удалённого Ollama:
-  - `llm.load_models` берёт `OLLAMA_BASE_URL` для моделей ollama (хвост /v1 отрезается);
-  - при заданной переменной psutil не используется (`local_mem_mb=None`);
-  - в журнал пишутся `ollama_base_url` и `local_model_size_mb` (из /api/ps);
-  - `scripts/setup_home_server.sh`, `src/server_info.py` (железо по ssh → `results/run_manifest.json` → `ollama_server`), `.env.example`, README.
-- Тесты: `tests/test_prompt_debug.py`, `tests/test_server_info.py`, удалённый Ollama в `tests/test_llm.py`.
+- Попытка 2 (2026-10-10): ключей по-прежнему нет. В `.env` заполнены только GIGACHAT_SCOPE, GIGACHAT_VERIFY_SSL_CERTS и OLLAMA_BASE_URL. Smoke: ответила только qwen3-8b, теперь на ПК gpu (6004 МБ на GPU, сервер localhost:11435), код 1.
+- Попытка 1: dev-прогоны qwen3-8b на ноутбуке, промпт v1, experiment=dev, 28 вызовов. Таблицы: `results/dev_ru`, `dev_cot_ru`, `dev_followup_doubt_ru`, `dev_typeE_llm`. Кроме того, `src/prompt_debug.py`, `docs/prompt_debug.md`, поддержка удалённого Ollama (`OLLAMA_BASE_URL`), `src/server_info.py`.
+- Попытка 2:
+  - `run_bank --experiment dev --models qwen3-8b` берёт все 5 ответов из кэша, новых вызовов нет;
+  - `src/server_info.py` поддерживает Windows-ПК: определяет ОС по `echo %OS%`, запускает PowerShell через `-EncodedCommand` с выводом в UTF-8, версию Ollama и модели берёт по API `OLLAMA_BASE_URL`, умеет `--note`, хост по умолчанию `gpu`;
+  - в `results/run_manifest.json` → `ollama_server` записаны железо gpu (Threadripper 3970X, 64 потока, 31,9 ГБ = 4×8 ГБ DDR4-2133, RTX 3090 24 ГБ, драйвер 591.74), Ollama 0.40.2, qwen3:8b 500a1f067a9f и note о сбоящей RAM;
+  - новый `scripts/ensure_gpu_ollama.sh`: проверяет Ollama по OLLAMA_BASE_URL, поднимает туннель `gpu_ollama.sh` (ждёт до 30 с), при недоступном ПК выходит с кодом 1. Вызывается шагом 0 в `scripts/run_experiments.sh` (не в demo);
+  - README, `docs/prompt_debug.md` (где считались dev-ответы qwen), HUMAN_TODO (пункты про домашний сервер закрыты решением «gpu»).
+- Промпт не менял и не замораживал.
 ## Ключевые файлы и точки входа
 - `.venv/bin/python -m src.prompt_debug [--write]`, `... -m src.prompt_debug freeze [--force]`.
-- `prompt_debug.build(log) -> (checked, markdown)`, `freeze_problems(checked)`, `write_doc(text)` (между маркерами AUTO).
-- `llm.ollama_base_url(default)`, `llm.ollama_is_remote()`; `server_info.collect(host)`, `write_manifest(info)` (обновляет только ключ `ollama_server`).
+- `scripts/ensure_gpu_ollama.sh` (код 0 = Ollama на gpu отвечает).
+- `.venv/bin/python -m src.server_info [--host gpu|home] [--write] [--note ...]`.
+- `prompt_debug.build(log)`, `freeze_problems(checked)`, `write_doc(text)`. `server_info.collect/ollama_api_info/write_manifest`.
 ## Решения и допущения
-- Промпт не менял и не замораживал: доступна одна модель, а подгонка под одну запрещена. `PROMPT_VERSION=v1`, `prompt_version`/`prompt_hash` в config = null.
-- Метрика «формат»: parse_ok + есть УВЕРЕННОСТЬ + нет finish_reason=length + у кода ровно один блок python (так требует FORMAT["code"]).
-- qwen3-8b, base: parse_ok 5/5, формат 4/5. На dev-D1 код стоит после «ОТВЕТ:» и повторён двумя блоками; `extract_code` взял длинный. cot, followup и E — всё в формате. Кандидат на v2 — уточнить FORMAT["code"], но только если так же ведут себя другие модели.
-- Удалённый Ollama считается удалённым, если задана `OLLAMA_BASE_URL` (при SSH-туннеле адрес — localhost, но модель на сервере).
-- Сервер не настраивал: для sudo нужен пароль. Скрипт и пункт G1 оставлены человеку.
+- Промпт v1 не подгоняется под одну модель, поэтому `prompt_version`/`prompt_hash` в config = null.
+- Метрика «формат» = parse_ok + есть УВЕРЕННОСТЬ + нет finish_reason=length + у кода ровно один блок python.
+- qwen3-8b base: parse_ok 5/5, формат 4/5 (на dev-D1 код стоит после «ОТВЕТ:» и повторён двумя блоками). Кандидат на v2 — правка FORMAT["code"], но только если так же ведут себя другие модели.
+- Ключ кэша не зависит от сервера Ollama: dev-ответы qwen, полученные на ноутбуке, переиспользуются. Для отладки формата это допустимо, записано в `docs/prompt_debug.md`.
+- Если `OLLAMA_BASE_URL` пуст, `ensure_gpu_ollama.sh` останавливает реальный прогон: на ноутбуке не считаем (HUMAN_NOTES).
 ## Проверка
-- `.venv/bin/python -m pytest -q`: 418 passed (было 409).
-- `src.prompt_debug freeze`: код 1, перечислены 3 модели без dev-ответов. Config не изменён.
-- `src.server_info` на реальном `home`: i5-6500, 4 потока, 11,6 ГБ, GPU нет, Ollama 0.1.41, llama3. В manifest не записано: сервер ещё не готов.
+- `.venv/bin/python -m pytest -q`: 420 passed (+2 теста server_info: Windows и Linux через подменённый ssh).
+- `src.server_info` на реальном gpu: все поля заполнены. `scripts/ensure_gpu_ollama.sh`: «Ollama отвечает … 0.40.2», код 0.
+- `src.smoke_test`: 1 из 4 (нет GIGACHAT_CREDENTIALS, YANDEX_API_KEY/FOLDER_ID, DEEPSEEK_API_KEY). `prompt_debug freeze` по-прежнему код 1.
 ## Что нужно для завершения
-- Ключи GigaChat, Yandex (key + folder_id) и DeepSeek в `.env`, smoke-тест проходит (G1 в HUMAN_TODO).
-- Решение по серверу для qwen (пункт G1 «Домашний сервер»). Dev-ответы qwen уже в кэше журнала: повторно не запрашиваются, если не меняется промпт.
-- Повторный шаг 07: `run_bank --experiment dev`, `run_extra cot followup_doubt --dev` (если в гипотезах H6/H9), `run_classifier --dev`, `prompt_debug --write`; при сбоях формата до 3 итераций (v2, v3) для всех моделей с записью в журнал итераций; затем `prompt_debug freeze` и коммит `step 07: freeze prompt <v>`.
+- В `.env`: GIGACHAT_CREDENTIALS (и решение по TLS), YANDEX_API_KEY + YANDEX_FOLDER_ID, DEEPSEEK_API_KEY. Smoke 4/4 (HUMAN_TODO G1).
+- ПК gpu включён и доступен по ssh.
+- Затем повторить шаг 07:
+  1. `scripts/ensure_gpu_ollama.sh`, `src.smoke_test`;
+  2. `src.run_bank --experiment dev`, `src.run_extra cot followup_doubt --dev` (если H6/H9 выбраны, иначе тоже можно), `src.run_classifier --dev`, `src.prompt_debug --write`;
+  3. если формат не соблюдается у нескольких моделей, до 3 итераций v2/v3 на всех моделях с записью в журнал итераций;
+  4. `src.prompt_debug freeze`, коммит `step 07: freeze prompt <v>`.
 ## Открытые вопросы и риски
-- Заметка человека («на ноутбуке 1–5 запросов») появилась в 22:29 UTC, во время dev-прогонов (22:22–22:31). На ноутбуке сделано 28 dev-вызовов qwen. Полных прогонов не было.
-- Сервер слабее ноутбука для LLM: только CPU. На ноутбуке dev ≈ 19,5 ток/с. Тип E (2400 вызовов, у qwen выход 200–670 токенов) на CPU может идти очень долго. Решает человек.
-- Dev-ответы qwen получены на ноутбуке (Metal), основной прогон, возможно, будет на сервере (CPU): числа могут отличаться при том же seed. Для отладки формата это не важно; в отчёте указать, где шёл основной прогон.
-- Гипотезы не выбраны: cot/followup проверены на всякий случай (по 2–3 задачи).
+- RAM на gpu сбоит. Падение ssh-сессии останавливает Ollama, `gpu_ollama.sh` переподключается. Ответы с ошибкой соединения ретраятся или дозапрашиваются, в журнале они видны как error.
+- Туннель живёт, пока жив процесс `gpu_ollama.sh` на ноутбуке (nohup). После перезагрузки ноутбука его поднимает `ensure_gpu_ollama.sh`.
+- Гипотезы не выбраны: cot/followup проверены на всякий случай (2–3 задачи, только qwen).
+- В `logs/calls.jsonl` дописана запись smoke от человека (22:58 UTC, gpu) и моя (smoke, gpu). Обе закоммичены как есть.
 ## Для следующих шагов
-- Шаг 08/09: локальную модель не гонять полностью на ноутбуке (HUMAN_NOTES). Перед прогоном `src.server_info --write`; манифест дополнять, не перезаписывая ключ `ollama_server`.
-- Записи журнала ollama теперь содержат `ollama_base_url` и `local_model_size_mb`; при удалённом сервере `local_mem_mb=None`. Для памяти брать `local_model_size_mb`/`local_vram_mb`.
-- Токены E на вызов (qwen, вход/выход по 0/5/20 примеров) — таблица в `docs/prompt_debug.md`, для `--estimate`/бюджета.
+- Шаги 08/09: в начале `scripts/ensure_gpu_ollama.sh`. Перед прогоном можно обновить `src.server_info --write --note "..."` (ключ `ollama_server` перезаписывается целиком, note передать снова).
+- Память локальной модели берётся из `local_model_size_mb`/`local_vram_mb` (на удалённом сервере `local_mem_mb=None`).
+- Токены E на вызов (qwen, по 0/5/20 примеров) — в таблице `docs/prompt_debug.md`, для `--estimate`.

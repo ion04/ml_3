@@ -1,0 +1,26 @@
+{
+  "ollama_server": {
+    "hostname": "DESKTOP-GM9R4PJ",
+    "os": "Майкрософт Windows 10 Pro 10.0.19045",
+    "cpu": "AMD Ryzen Threadripper 3970X 32-Core Processor",
+    "cpu_threads": 64,
+    "ram_modules": [
+      "8 GB 2133 MHz",
+      "8 GB 2133 MHz",
+      "8 GB 2133 MHz",
+      "8 GB 2133 MHz"
+    ],
+    "gpu": [
+      "NVIDIA GeForce RTX 3090, 24576 MiB, 591.74"
+    ],
+    "ram_gb": 31.9,
+    "models": [
+      "qwen3:8b 500a1f067a9f"
+    ],
+    "ollama_version": "0.40.2",
+    "ollama_base_url": "http://localhost:11435",
+    "ssh_host": "gpu",
+    "collected_utc": "2026-10-09T23:00:01+00:00",
+    "note": "Со слов владельца, оперативная память ПК сбоит (возможны падения и перезагрузки). Ollama запускается внутри ssh-сессии (scripts/gpu_ollama.sh, туннель localhost:11435). Каждый вызов сразу пишется в logs/calls.jsonl, после падения прогон продолжается из кэша; ответы с ошибкой соединения не считаются ответами модели."
+  }
+}

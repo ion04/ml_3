@@ -65,7 +65,7 @@ ollama pull qwen3:8b
    ```bash
    .venv/bin/python -m src.smoke_test
    ```
-   Локальная модель на другом компьютере (домашний сервер): `OLLAMA_BASE_URL` в `.env` (см. `.env.example`), подготовка сервера — `scripts/setup_home_server.sh`, железо сервера для отчёта — `.venv/bin/python -m src.server_info --write` (→ `results/run_manifest.json`).
+   Локальная модель считается на ПК `gpu` (Windows, RTX 3090): `scripts/gpu_ollama.sh` запускает там Ollama и туннель `localhost:11435`, в `.env` задаётся `OLLAMA_BASE_URL=http://localhost:11435`. Проверка или запуск туннеля — `scripts/ensure_gpu_ollama.sh` (его вызывает `scripts/run_experiments.sh`). Железо сервера для отчёта — `.venv/bin/python -m src.server_info --write [--host gpu|home] [--note "..."]` (→ `results/run_manifest.json` → `ollama_server`). Запасной вариант — домашний сервер (`scripts/setup_home_server.sh`, `--host home`).
    Все вызовы LLM идут через `src/llm.py::ask` и сразу дописываются в `logs/calls.jsonl` (вызовы mock-моделей пишутся в `demo/calls.jsonl`). Повторный запуск с теми же входами берёт ответ из журнала (кэш) и API не вызывает.
 3. Банк задач и гипотезы (`data/tasks.jsonl`, 38 задач; `data/tasks_dev.jsonl`, 5 задач для отладки промпта; схема полей описана в docstring `src/bank.py`):
    ```bash
