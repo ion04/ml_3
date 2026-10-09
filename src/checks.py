@@ -157,6 +157,26 @@ def early_eval_calls(log_path, commit_time: datetime | None) -> list[str]:
     return early
 
 
+def check_hypotheses_committed(cfg: dict) -> tuple[list[str], tuple | None]:
+    """Прогнозы в hypotheses.md заполнены, файл закоммичен и не менялся, список гипотез в конфиге совпадает
+    с коммитом. Возвращает (проблемы, (хэш, время) коммита или None). Её же вызывают прогонщики."""
+    md_problems = check_hypotheses_md(HYPOTHESES_MD.read_text(encoding="utf-8"), cfg.get("hypotheses", []))
+    commit = last_commit(HYPOTHESES_MD)
+    if commit is None:
+        md_problems.append("hypotheses.md не закоммичен")
+    else:
+        if is_modified(HYPOTHESES_MD):
+            md_problems.append("hypotheses.md изменён после коммита — закоммитьте (до прогонов) или верните изменения")
+        # Список гипотез в config/experiment.json должен совпадать с закоммиченным вместе с прогнозом
+        # (сам файл потом меняют другие шаги, например prompt_version, поэтому сравниваем только hypotheses).
+        committed = _git(["show", f"{commit[0]}:config/experiment.json"])
+        committed_hyps = json.loads(committed).get("hypotheses") if committed else None
+        if committed_hyps != cfg.get("hypotheses", []):
+            md_problems.append(f"hypotheses в config/experiment.json ({cfg.get('hypotheses', [])}) не совпадают "
+                               f"с коммитом гипотез ({committed_hyps}) — закоммитьте их вместе с hypotheses.md")
+    return md_problems, commit
+
+
 # ---------- Гейты ----------
 
 def g1() -> int:
@@ -181,20 +201,7 @@ def g1() -> int:
         cfg = json.load(f)
     results.append(("3 гипотезы из разных групп в config/experiment.json", check_hypotheses_config(cfg)))
 
-    md_problems = check_hypotheses_md(HYPOTHESES_MD.read_text(encoding="utf-8"), cfg.get("hypotheses", []))
-    commit = last_commit(HYPOTHESES_MD)
-    if commit is None:
-        md_problems.append("hypotheses.md не закоммичен")
-    else:
-        if is_modified(HYPOTHESES_MD):
-            md_problems.append("hypotheses.md изменён после коммита — закоммитьте (до прогонов) или верните изменения")
-        # Список гипотез в config/experiment.json должен совпадать с закоммиченным вместе с прогнозом
-        # (сам файл потом меняют другие шаги, например prompt_version, поэтому сравниваем только hypotheses).
-        committed = _git(["show", f"{commit[0]}:config/experiment.json"])
-        committed_hyps = json.loads(committed).get("hypotheses") if committed else None
-        if committed_hyps != cfg.get("hypotheses", []):
-            md_problems.append(f"hypotheses в config/experiment.json ({cfg.get('hypotheses', [])}) не совпадают "
-                               f"с коммитом гипотез ({committed_hyps}) — закоммитьте их вместе с hypotheses.md")
+    md_problems, commit = check_hypotheses_committed(cfg)
     results.append(("прогнозы в hypotheses.md заполнены и закоммичены", md_problems))
 
     commit_time = commit[1] if commit else None

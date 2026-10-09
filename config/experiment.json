@@ -5,16 +5,57 @@
   "temperature_main": 0,
   "sc_repeats": 5,
   "sc_temperature": 0.7,
-  "languages": ["ru"],
+  "languages": [
+    "ru"
+  ],
   "seed": 42,
   "bootstrap_n": 1000,
   "prompt_version": null,
+  "prompt_hash": null,
+  "extra_runs": {
+    "_comment": "Дополнительные прогоны src.run_extra (шаг 05). types: какие типы задач брать (null = все, где есть нужный текст). cot.extra_models: модели, которые в режиме cot идут с обычным промптом base, потому что рассуждают сами (например qwen3-8b-think для H6); прогоняются, даже если enabled=false. vote_rule описывает правило большинства для H7 (см. src/run_extra.py::vote).",
+    "cot": {
+      "types": [
+        "A",
+        "B"
+      ],
+      "extra_models": []
+    },
+    "selfconsistency": {
+      "types": [
+        "A",
+        "B",
+        "F"
+      ],
+      "vote_rule": "числа совпадают, если все в пределах tolerance задачи; отказ и «нельзя определить» — один ответ; неразобранные ответы не голосуют; при ничьей — ответ, встретившийся раньше"
+    },
+    "followup_doubt": {
+      "types": [
+        "A",
+        "B",
+        "F"
+      ]
+    },
+    "paraphrase": {
+      "types": null
+    },
+    "lang_en": {
+      "types": null
+    },
+    "verbal_formula": {
+      "types": null
+    }
+  },
   "typeE": {
     "_comment": "Заполнит шаг 06. Значения ниже — умолчания из flow/HUMAN_NOTES.md (ожидают решения человека).",
     "dataset": "AI4I 2020 (UCI id 601)",
     "test_mode": "enriched",
     "n_test": 200,
     "n_test_failures": 40,
-    "shots": [0, 5, 20]
+    "shots": [
+      0,
+      5,
+      20
+    ]
   }
 }

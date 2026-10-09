@@ -127,6 +127,8 @@ def make_cache_key(model_key, model_requested, system, history, prompt,
 # Индекс успешных записей журнала: путь -> {"size": размер файла, "records": {cache_key: запись}}.
 # Если размер файла изменился не через этот процесс, индекс перечитывается целиком.
 _cache_index: dict[str, dict] = {}
+# Прогонщики вызывают ask() из нескольких потоков: запись в журнал и индекс кэша — по одному потоку.
+_log_lock = threading.RLock()
 
 
 def _read_successes(log_path: Path) -> dict:
@@ -139,39 +141,43 @@ def _read_successes(log_path: Path) -> dict:
                 rec = json.loads(line)
             except json.JSONDecodeError:
                 continue  # недописанная строка (например, процесс убили при записи)
-            if rec.get("error") is None and rec.get("response_text") is not None:
+            # Успешная запись = вызов без ошибки. Пустой текст (например, сработал фильтр контента) —
+            # тоже ответ модели: его нельзя перезапрашивать, поэтому он кэшируется.
+            if rec.get("error") is None:
                 # Берём самую первую успешную запись: именно этот ответ и есть «тот самый».
                 records.setdefault(rec.get("cache_key"), rec)
     return records
 
 
 def _cache_lookup(log_path: Path, key: str) -> dict | None:
-    size = log_path.stat().st_size if log_path.exists() else 0
-    entry = _cache_index.get(str(log_path))
-    if entry is None or entry["size"] != size:
-        entry = {"size": size, "records": _read_successes(log_path)}
-        _cache_index[str(log_path)] = entry
-    return entry["records"].get(key)
+    with _log_lock:
+        size = log_path.stat().st_size if log_path.exists() else 0
+        entry = _cache_index.get(str(log_path))
+        if entry is None or entry["size"] != size:
+            entry = {"size": size, "records": _read_successes(log_path)}
+            _cache_index[str(log_path)] = entry
+        return entry["records"].get(key)
 
 
 def _append_log(log_path: Path, record: dict) -> None:
     """Дописывает одну запись в конец журнала и сразу сбрасывает её на диск."""
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    size_before = log_path.stat().st_size if log_path.exists() else 0
     line = _scrub(json.dumps(record, ensure_ascii=False))  # страховка: секретов в журнале нет
-    with open(log_path, "a", encoding="utf-8") as f:
-        f.write(line + "\n")
-        f.flush()
-        os.fsync(f.fileno())
-    # Обновляем индекс кэша без перечитывания файла (если файл никто другой не менял).
-    entry = _cache_index.get(str(log_path))
-    if entry is not None:
-        if entry["size"] == size_before:
-            entry["size"] = log_path.stat().st_size
-            if record["error"] is None and record["response_text"] is not None:
-                entry["records"].setdefault(record["cache_key"], record)
-        else:
-            del _cache_index[str(log_path)]
+    with _log_lock:
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        size_before = log_path.stat().st_size if log_path.exists() else 0
+        with open(log_path, "a", encoding="utf-8") as f:
+            f.write(line + "\n")
+            f.flush()
+            os.fsync(f.fileno())
+        # Обновляем индекс кэша без перечитывания файла (если файл никто другой не менял).
+        entry = _cache_index.get(str(log_path))
+        if entry is not None:
+            if entry["size"] == size_before:
+                entry["size"] = log_path.stat().st_size
+                if record["error"] is None:
+                    entry["records"].setdefault(record["cache_key"], record)
+            else:
+                del _cache_index[str(log_path)]
 
 
 def _resolve_log_path(provider: str, log_path) -> Path:
@@ -367,15 +373,35 @@ def _call_ollama(cfg, model_id, messages, temperature, max_tokens, repeat):
 
 
 MOCK_TEMPLATE = "Демо-ответ mock-модели {model} (сообщений в диалоге: {n_messages}).\nОТВЕТ: {answer}\nУВЕРЕННОСТЬ: {confidence}"
+MOCK_BOOL_TEMPLATE = "Демо-ответ mock-модели {model} (сообщений в диалоге: {n_messages}).\nОТВЕТ: {verdict}\nУВЕРЕННОСТЬ: {confidence}"
+MOCK_CODE_TEMPLATE = "Демо-ответ mock-модели {model}.\n```python\n{code}\n```\nОТВЕТ: код выше\nУВЕРЕННОСТЬ: {confidence}"
 
 
 def _call_mock(cfg, model_id, messages, temperature, max_tokens, repeat):
-    """Детерминированный ответ без сети: зависит только от входа (модель, сообщения, T, repeat)."""
+    """Детерминированный ответ без сети: зависит только от входа (модель, сообщения, T, repeat).
+
+    Чтобы демо-прогон проходил все ветки разбора, mock смотрит, что просили в сообщениях пользователя:
+    код (```python) → маленькая программа (каждая 4-я падает), «верно или неверно» → вердикт, иначе число.
+    params.template в конфиге задаёт свой шаблон и отключает этот выбор.
+    """
     seed_text = json.dumps([model_id, messages, temperature, repeat], ensure_ascii=False)
     n = int(hashlib.sha256(seed_text.encode("utf-8")).hexdigest()[:8], 16)
-    template = (cfg.get("params") or {}).get("template", MOCK_TEMPLATE)
-    text = template.format(model=model_id, n_messages=len(messages),
-                           answer=n % 100, confidence=50 + n % 51)
+    user_text = "\n".join(m["content"] for m in messages if m["role"] == "user")
+    template = (cfg.get("params") or {}).get("template")
+    if template is None:
+        if "```python" in user_text:
+            template = MOCK_CODE_TEMPLATE
+        elif "верно или неверно" in user_text or "true or false" in user_text:
+            template = MOCK_BOOL_TEMPLATE
+        else:
+            template = MOCK_TEMPLATE
+    verdict = ("верно" if n % 2 else "неверно") if "верно или неверно" in user_text else ("true" if n % 2 else "false")
+    if n % 4 == 0:
+        code = 'raise RuntimeError("демо: код mock-модели упал")'
+    else:
+        code = f'print("accuracy: {0.9 + (n % 10) / 100:.4f}")'
+    text = template.format(model=model_id, n_messages=len(messages), answer=n % 100,
+                           confidence=50 + n % 51, verdict=verdict, code=code)
     return {
         "text": text,
         "tokens_in": sum(len(m["content"].split()) for m in messages),

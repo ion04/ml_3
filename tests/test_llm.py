@@ -86,6 +86,18 @@ def test_cache_returns_logged_answer(tmp_path, monkeypatch):
     assert third.cached and third.call_id == first.call_id
 
 
+def test_empty_answer_is_cached(tmp_path, monkeypatch):
+    # Пустой ответ без ошибки (например, фильтр контента) — ответ модели: повторно не запрашивается.
+    log = tmp_path / "calls.jsonl"
+    empty = {"text": None, "tokens_in": 1, "tokens_out": 0, "model_reported": "m", "finish_reason": "content_filter",
+             "reasoning_text": None, "latency_s": 0.0}
+    monkeypatch.setattr(llm, "_call_mock", lambda *a, **k: empty)
+    first = llm.ask("m1", "q", log_path=log)
+    second = llm.ask("m1", "q", log_path=log)
+    assert first.text is None and first.error is None and second.cached
+    assert len(read_log(log)) == 1
+
+
 def test_cache_key_depends_on_inputs(tmp_path):
     log = tmp_path / "calls.jsonl"
     llm.ask("m1", "вопрос", log_path=log)
