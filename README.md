@@ -58,13 +58,14 @@ ollama pull qwen3:8b
 
 ## Как запустить эксперимент
 
-> Раздел-заглушка. Следующие шаги флоу дополнят его конкретными командами.
+> Раздел дополняется по шагам флоу; пункты с пометкой _(шаг NN)_ ещё не готовы.
 
 1. Установить окружение и заполнить `.env` (см. выше).
 2. Smoke-тест моделей (по одному короткому запросу к каждой включённой модели из `config/models.json`; код выхода 0, только если ответили все):
    ```bash
    .venv/bin/python -m src.smoke_test
    ```
+   Локальная модель на другом компьютере (домашний сервер): `OLLAMA_BASE_URL` в `.env` (см. `.env.example`), подготовка сервера — `scripts/setup_home_server.sh`, железо сервера для отчёта — `.venv/bin/python -m src.server_info --write` (→ `results/run_manifest.json`).
    Все вызовы LLM идут через `src/llm.py::ask` и сразу дописываются в `logs/calls.jsonl` (вызовы mock-моделей пишутся в `demo/calls.jsonl`). Повторный запуск с теми же входами берёт ответ из журнала (кэш) и API не вызывает.
 3. Банк задач и гипотезы (`data/tasks.jsonl`, 38 задач; `data/tasks_dev.jsonl`, 5 задач для отладки промпта; схема полей описана в docstring `src/bank.py`):
    ```bash
@@ -83,6 +84,16 @@ ollama pull qwen3:8b
    .venv/bin/python -m pytest tests/test_parse.py tests/test_grade.py tests/test_prompts.py -q
    ```
    Формат ответа: последние строки `ОТВЕТ: …` и `УВЕРЕННОСТЬ: 0–100` (`ANSWER:` / `CONFIDENCE:` для EN). Варианты промпта: `base`, `cot` (H6), `paraphrase` (H8), `formula`/`verbal` (H2), `followup_doubt` (H9), `classify_row` (тип E). Автоматически проверяются A, B (вердикт), E и F; C, D и обоснование B оценивают люди вслепую.
+
+   Отладка и заморозка промпта (шаг 07; только dev-задачи, на всех включённых моделях, журнал итераций — `docs/prompt_debug.md`):
+   ```bash
+   .venv/bin/python -m src.run_bank --experiment dev && .venv/bin/python -m src.run_extra cot followup_doubt --dev
+   .venv/bin/python -m src.run_classifier --dev
+   .venv/bin/python -m src.prompt_debug --write   # parse_ok и соблюдение формата модель × версия (по журналу)
+   .venv/bin/python -m src.prompt_debug freeze    # prompt_version + prompt_hash → config/experiment.json
+   git add -A && git commit -m "step 07: freeze prompt <версия>"
+   ```
+   `freeze` не сработает, пока у каждой включённой модели нет ответов base-промпта текущей версии на все 5 dev-задач.
 5. Основной прогон и прогоны под гипотезы (шаг 05; реальные прогоны — шаг 08, только после `src.checks g1` = 0):
    ```bash
    scripts/run_experiments.sh            # всё одной командой: smoke → g1 → main → доп. прогоны → код D → ...

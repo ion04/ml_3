@@ -33,6 +33,7 @@ def main() -> int:
                 ps = llm.ollama_ps(cfg["base_url"], llm._expand_env(cfg["model"]))
                 if ps:
                     status += f" | в памяти {ps['size_mb']:.0f} МБ, на GPU {ps['size_vram_mb']:.0f} МБ"
+                status += f" | сервер {cfg['base_url']}"
         else:
             status = "ОШИБКА: " + (res.error or "пустой ответ")[:200]
         rows.append([cfg["key"], cfg["role"], res.model_reported or "-",

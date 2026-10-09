@@ -31,6 +31,7 @@ def setup(tmp_path, monkeypatch):
     cfg_path.write_text(json.dumps(TEST_MODELS), encoding="utf-8")
     monkeypatch.setattr(llm, "MODELS_PATH", cfg_path)
     monkeypatch.setattr(llm, "_cache_index", {})
+    monkeypatch.delenv("OLLAMA_BASE_URL", raising=False)   # тесты не зависят от адреса сервера в .env
     sleeps = []
     monkeypatch.setattr(llm.time, "sleep", lambda s: sleeps.append(s))
     return sleeps
@@ -299,6 +300,36 @@ def test_ollama_parsing_and_memory(tmp_path, monkeypatch):
     assert sent["body"]["options"] == {"temperature": 0.0, "seed": 44, "num_predict": 30}
     rec = read_log(log)[0]
     assert rec["local_mem_mb"] == 1234.5 and rec["local_vram_mb"] == 6000.0
+    assert rec["ollama_base_url"] == "http://localhost:11434" and rec["local_model_size_mb"] == 6000.0
+
+
+def test_ollama_remote_server(tmp_path, monkeypatch):
+    """OLLAMA_BASE_URL: запросы идут на сервер, /v1 отрезается, psutil ноутбука не используется."""
+    import httpx
+
+    sent = {}
+
+    def fake_post(url, json, timeout):
+        sent["url"] = url
+        data = {"model": "qwen3:8b", "message": {"role": "assistant", "content": "4"},
+                "done_reason": "stop", "prompt_eval_count": 15, "eval_count": 2}
+        return httpx.Response(200, json=data, request=httpx.Request("POST", url))
+
+    def no_psutil():
+        raise AssertionError("при удалённом сервере память ноутбука не меряется")
+
+    monkeypatch.setenv("OLLAMA_BASE_URL", "http://100.64.0.1:11434/v1/")
+    monkeypatch.setattr(llm.httpx, "post", fake_post)
+    monkeypatch.setattr(llm, "_ollama_rss_mb", no_psutil)
+    monkeypatch.setattr(llm, "ollama_ps", lambda base_url, model_id: {"size_mb": 6000.0, "size_vram_mb": 5900.0})
+    assert llm.get_model("oll")["base_url"] == "http://100.64.0.1:11434"
+    assert llm.get_model("oai")["base_url"] == "https://example.invalid/v1"     # другие провайдеры не трогаются
+    log = tmp_path / "calls.jsonl"
+    res = llm.ask("oll", "2+2?", log_path=log)
+    assert res.text == "4" and sent["url"] == "http://100.64.0.1:11434/api/chat"
+    rec = read_log(log)[0]
+    assert rec["local_mem_mb"] is None and rec["local_vram_mb"] == 5900.0 and rec["local_model_size_mb"] == 6000.0
+    assert rec["ollama_base_url"] == "http://100.64.0.1:11434"
 
 
 def test_project_config_is_valid():

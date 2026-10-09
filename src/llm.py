@@ -56,11 +56,29 @@ class LLMResult:
 
 # ---------- Конфиг моделей ----------
 
+def ollama_base_url(default: str) -> str:
+    """Адрес Ollama: OLLAMA_BASE_URL из .env (удалённый сервер), иначе base_url из конфига.
+    Хвост /v1 (адрес OpenAI-совместимого API) отрезается: мы ходим в нативный /api/chat."""
+    url = (os.getenv("OLLAMA_BASE_URL") or default).rstrip("/")
+    return url[:-3] if url.endswith("/v1") else url
+
+
+def ollama_is_remote() -> bool:
+    """Ollama на другом компьютере (задан OLLAMA_BASE_URL)? Тогда память через psutil не меряем:
+    даже при SSH-туннеле адрес localhost, а модель работает на сервере."""
+    return bool(os.getenv("OLLAMA_BASE_URL"))
+
+
 def load_models(path=None) -> dict:
-    """Словарь key -> описание модели из config/models.json."""
+    """Словарь key -> описание модели из config/models.json.
+    У моделей Ollama base_url заменяется на OLLAMA_BASE_URL, если переменная задана."""
     with open(path or MODELS_PATH, encoding="utf-8") as f:
         data = json.load(f)
-    return {m["key"]: m for m in data["models"]}
+    models = {m["key"]: m for m in data["models"]}
+    for m in models.values():
+        if m["provider"] == "ollama":
+            m["base_url"] = ollama_base_url(m["base_url"])
+    return models
 
 
 def get_model(model_key: str) -> dict:
@@ -487,7 +505,9 @@ def ask(model_key, prompt, temperature=0.0, *, system=None, history=None, max_to
         t0 = time.perf_counter()
         out, error, exc, local_mem_mb = None, None, None, None
         try:
-            if provider == "ollama":
+            # Память через psutil меряется, только если Ollama на этом компьютере.
+            # У удалённого сервера (OLLAMA_BASE_URL) размер модели берётся из /api/ps ниже.
+            if provider == "ollama" and not ollama_is_remote():
                 with _MemWatcher() as mem:
                     out = _call_provider(provider, cfg, model_id, messages, eff_temp, max_tokens, repeat)
                 local_mem_mb = round(mem.max_mb, 1)
@@ -529,9 +549,12 @@ def ask(model_key, prompt, temperature=0.0, *, system=None, history=None, max_to
             "local_mem_mb": local_mem_mb,
             "local_vram_mb": None,
         }
-        if provider == "ollama" and error is None:
-            ps = ollama_ps(cfg["base_url"], model_id)
-            record["local_vram_mb"] = ps["size_vram_mb"] if ps else None
+        if provider == "ollama":
+            record["ollama_base_url"] = cfg["base_url"]    # где считалась локальная модель (ноутбук / сервер)
+            if error is None:
+                ps = ollama_ps(cfg["base_url"], model_id)
+                record["local_vram_mb"] = ps["size_vram_mb"] if ps else None
+                record["local_model_size_mb"] = ps["size_mb"] if ps else None   # вся модель в памяти (/api/ps)
         _append_log(log_path, record)
 
         if error is None or not is_retryable(exc) or attempt == MAX_ATTEMPTS:

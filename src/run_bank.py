@@ -123,7 +123,8 @@ def select_models(spec: str, demo: bool, allow_disabled: bool = False) -> list[s
         elif llm.missing_env(cfg):
             print(f"  пропуск {key}: в .env нет {', '.join(llm.missing_env(cfg))}")
         elif cfg["provider"] == "ollama" and not ollama_alive(cfg["base_url"]):
-            print(f"  пропуск {key}: Ollama не отвечает на {cfg['base_url']} (brew services start ollama)")
+            print(f"  пропуск {key}: Ollama не отвечает на {cfg['base_url']} (локально: brew services start ollama; "
+                  "сервер: OLLAMA_BASE_URL в .env, туннель ssh -N -L 11434:localhost:11434 home)")
         else:
             chosen.append(key)
     return chosen
