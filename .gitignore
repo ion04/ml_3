@@ -15,3 +15,6 @@ __pycache__/
 # Служебные файлы агентского флоу
 flow/state/
 flow/logs/
+
+# Резервная копия отчёта перед пересборкой (src.build_report)
+report/*.bak
