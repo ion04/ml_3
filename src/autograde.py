@@ -28,7 +28,6 @@
 import argparse
 import csv
 import io
-import json
 import random
 import sys
 from pathlib import Path
@@ -127,19 +126,11 @@ def grade_d(rec: dict, row: dict, task: dict | None) -> dict:
 
 def d_exec_records(results_dir: Path) -> dict:
     """call_id -> запись запуска кода D. Каждый ответ запускается один раз (pass@1): если записей
-    по одному call_id несколько, берётся первая. Этой же функцией пользуется src/blind.py."""
+    по одному call_id несколько, берётся первая. Этой же функцией пользуются src/blind.py и src/error_candidates.py."""
     recs = {}
     for rec in run_bank.read_jsonl(results_dir / "d_exec.jsonl"):
         recs.setdefault(rec["call_id"], rec)
     return recs
-
-
-def current_split_hash() -> str | None:
-    """Отпечаток текущего разбиения типа E (ответы на старое разбиение не проверяем, как в typeE_metrics)."""
-    try:
-        return typeE.split_hash(typeE.load_split())
-    except FileNotFoundError:
-        return None
 
 
 def build(results_dir: Path, tasks: dict) -> tuple[list[dict], dict]:
@@ -148,7 +139,7 @@ def build(results_dir: Path, tasks: dict) -> tuple[list[dict], dict]:
                "C (слепые листы)": 0, "D без запуска кода": 0}
     rows = []
     d_rows = {}     # call_id -> строка результатов D (для связи с d_exec)
-    s_hash = current_split_hash()
+    s_hash = typeE.current_split_hash()   # ответы E на старое разбиение не проверяем, как в typeE_metrics
     for path in answer_tables(results_dir):
         for row in run_bank.read_jsonl(path):
             if row["error"] is not None:
@@ -304,9 +295,7 @@ def main(argv=None) -> int:
 
     # Таблица производная: каждый раз пересобирается целиком из таблиц ответов и банка.
     path = results_dir / GRADED_NAME
-    with open(path, "w", encoding="utf-8") as f:
-        for r in rows:
-            f.write(json.dumps(r, ensure_ascii=False) + "\n")
+    run_bank.write_jsonl(path, rows)
 
     n_auto = sum(r["correct"] is not None for r in rows)
     changed = sum(r["correct"] != r["correct_at_run"] for r in rows if r["check"] == "answer")

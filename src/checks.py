@@ -34,7 +34,7 @@ from src import bank, llm
 ROOT = Path(__file__).resolve().parent.parent
 HYPOTHESES_MD = ROOT / "hypotheses.md"
 EXPERIMENT_PATH = ROOT / "config" / "experiment.json"
-LOG_PATH = ROOT / "logs" / "calls.jsonl"
+LOG_PATH = llm.REAL_LOG
 GRADING_DIR = ROOT / "grading"
 PRICING_PATH = ROOT / "config" / "pricing.json"
 
@@ -239,6 +239,7 @@ AGREE_VALUES = {"да", "нет"}
 
 
 def _show(path: Path) -> str:
+    """Копия run_bank.show: импортировать run_bank здесь нельзя, он сам импортирует этот модуль."""
     path = Path(path).resolve()
     return str(path.relative_to(ROOT)) if path.is_relative_to(ROOT) else str(path)
 

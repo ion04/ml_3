@@ -27,7 +27,6 @@ H1, H3, H5, H10, H11, H12, H13 отдельных прогонов не треб
 """
 
 import argparse
-import json
 import sys
 from pathlib import Path
 
@@ -165,13 +164,8 @@ def write_votes(rows: list[dict], tasks: list[dict], path: Path) -> None:
     for r in rows:
         if r["task_id"] in by_id:
             groups.setdefault((r["model_key"], r["task_id"]), []).append(r)
-    table = {(v["model_key"], v["task_id"]): v for v in run_bank.read_jsonl(path)}
-    for (model, tid), g in groups.items():
-        table[(model, tid)] = vote(by_id[tid], g)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
-        for v in table.values():
-            f.write(json.dumps(v, ensure_ascii=False) + "\n")
+    votes = [vote(by_id[tid], g) for (_, tid), g in groups.items()]
+    run_bank.write_results(path, votes, key=lambda v: (v["model_key"], v["task_id"]))
     print(f"  ответы большинства: {run_bank.show(path)}")
 
 

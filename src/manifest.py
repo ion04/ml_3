@@ -30,11 +30,6 @@ from src import checks, llm, prompts, run_bank, typeE
 ROOT = llm.ROOT
 MANIFEST_NAME = "run_manifest.json"
 PACKAGES = ["openai", "gigachat", "httpx", "scikit-learn", "numpy", "pandas", "scipy", "statsmodels"]
-SMOKE_DEV = {"smoke", "dev"}   # служебные вызовы: в разделе models не учитываются
-
-
-def read_log(path: Path) -> list[dict]:
-    return run_bank.read_jsonl(path)
 
 
 def call_stats(records: list[dict]) -> dict:
@@ -68,7 +63,7 @@ def by_model(records: list[dict], models_cfg: dict) -> dict:
     """Сводка по моделям только для оценочных вызовов (без smoke и dev)."""
     groups = {}
     for r in records:
-        if (r.get("meta") or {}).get("experiment") not in SMOKE_DEV:
+        if (r.get("meta") or {}).get("experiment") not in checks.NON_EVAL_EXPERIMENTS:
             groups.setdefault(r["model_key"], []).append(r)
     out = {}
     for key, rs in sorted(groups.items()):
@@ -152,12 +147,8 @@ def environment() -> dict:
 
 def build(log_path: Path, results_dir: Path, demo: bool) -> dict:
     cfg = run_bank.load_experiment()
-    records = read_log(log_path)
+    records = run_bank.read_jsonl(log_path)
     commit = checks.last_commit(checks.HYPOTHESES_MD)
-    try:
-        split_hash = typeE.split_hash(typeE.load_split())
-    except FileNotFoundError:
-        split_hash = None
     return {
         "_comment": ("ДЕМО (mock-модели): не результаты эксперимента. " if demo else "")
                     + "Собрано src.manifest по журналу и таблицам; руками не править.",
@@ -178,7 +169,7 @@ def build(log_path: Path, results_dir: Path, demo: bool) -> dict:
         },
         "params": {k: cfg.get(k) for k in ["temperature_main", "sc_repeats", "sc_temperature", "languages",
                                            "seed", "bootstrap_n", "typeE"]},
-        "typeE_split_hash": split_hash,
+        "typeE_split_hash": typeE.current_split_hash(),
         "calls_by_experiment": by_experiment(records),
         "models": by_model(records, llm.load_models()),
         "results": table_stats(results_dir),

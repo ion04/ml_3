@@ -217,6 +217,14 @@ def split_hash(split: dict) -> str:
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:12]
 
 
+def current_split_hash() -> str | None:
+    """Отпечаток текущего data/e_split.json; None, если разбиения ещё нет."""
+    try:
+        return split_hash(load_split())
+    except FileNotFoundError:
+        return None
+
+
 def check_split(split: dict, y: np.ndarray) -> None:
     """Инварианты разбиения: тест и примеры не пересекаются, 5 ⊂ 20, состав классов как задумано."""
     test = set(split["test"])

@@ -17,6 +17,7 @@ grading/ (листы двух проверяющих и ключ), logs/calls.js
 - Парные тесты (Макнемар) берут только задачи, где у обоих условий correct равно 0 или 1; 0,5 исключается.
 """
 
+import hashlib
 import json
 import math
 import warnings
@@ -30,7 +31,7 @@ from statsmodels.stats.contingency_tables import mcnemar
 from statsmodels.stats.multitest import multipletests
 from statsmodels.stats.proportion import proportion_confint
 
-from src import autograde, blind, checks, llm, run_bank, typeE, typeE_metrics
+from src import autograde, bank, blind, checks, manifest, run_bank, typeE, typeE_metrics
 
 ROOT = run_bank.ROOT
 ROLE_ORDER = ["ru1", "ru2", "big", "local"]       # порядок моделей в таблицах и цвет на графиках
@@ -384,19 +385,22 @@ def mcnemar_pairs(df: pd.DataFrame, models: list[str]) -> pd.DataFrame:
 
 # ---------- Тип D ----------
 
-def typeD_table(df: pd.DataFrame) -> pd.DataFrame:
+def typeD_table(df: pd.DataFrame, n_boot: int = 1000, seed: int = 42) -> pd.DataFrame:
     """По моделям и всем вместе: pass@1, корректность метрики (ручная), доля программ с ≥1 методологической
-    ошибкой и доля по каждому пункту чек-листа (среднее двух проверяющих; «н/п» и «кода нет» исключаются)."""
+    ошибкой (у трёх долей — 95% CI бутстрепом по задачам) и доля по каждому пункту чек-листа
+    (среднее двух проверяющих; «н/п» и «кода нет» исключаются)."""
     d = df[df["type"] == "D"]
     if d.empty:
         return pd.DataFrame()
+    d = d.assign(pass_float=d["pass_at_1"].astype(float))
     out = []
     for model, g in [*d.groupby("model_key", sort=False), ("все модели", d)]:
         rec = {"model_key": model, "n_programs": len(g),
-               "pass_at_1": g["pass_at_1"].astype(float).mean(),
-               "n_pass_unknown": int(g["pass_at_1"].isna().sum()),
+               "pass_at_1": g["pass_float"].mean(), "n_pass_unknown": int(g["pass_at_1"].isna().sum()),
                "correct": g["correct"].mean(), "n_correct_graded": int(g["correct"].notna().sum()),
                "method_error_any": g["any_error_mean"].mean(), "n_method_graded": int(g["any_error_mean"].notna().sum())}
+        for name, col in [("pass_at_1", "pass_float"), ("correct", "correct"), ("method_error_any", "any_error_mean")]:
+            rec[f"{name}_ci_low"], rec[f"{name}_ci_high"] = cluster_bootstrap(g, col, n_boot=n_boot, seed=seed)
         for c in blind.CHECKLIST:
             rec[c] = g[f"{c}_mean"].mean()
         out.append(rec)
@@ -446,6 +450,29 @@ def f1_failure(y: np.ndarray, p: np.ndarray) -> float:
     tp = int(((y == 1) & (p == 1)).sum())
     den = 2 * tp + int(((y == 0) & (p == 1)).sum()) + int(((y == 1) & (p == 0)).sum())
     return 2 * tp / den if den else 0.0
+
+
+def logreg_rows(logreg: dict, preds: pd.DataFrame) -> pd.DataFrame:
+    """Предсказания LogReg (из logreg_predictions) в том же виде, что ответы LLM: model_key, shots, row_idx, y_true, pred.
+    Истинные метки берутся из ответов LLM (preds) — те же строки теста."""
+    y_by_row = dict(zip(preds["row_idx"], preds["y_true"]))
+    return pd.DataFrame([{"model_key": "LogisticRegression", "shots": k, "row_idx": i, "y_true": y_by_row[i], "pred": p}
+                         for k, by_row in logreg.items() for i, p in by_row.items() if i in y_by_row])
+
+
+def typeE_ci_table(preds: pd.DataFrame, n_boot: int, seed: int) -> pd.DataFrame:
+    """Тип E: F1 класса «отказ» и balanced accuracy по группам model_key × shots с 95% CI
+    (бутстреп строк теста: n_boot раз выбираем строки с возвращением, перцентили 2,5 и 97,5)."""
+    out = []
+    for (model, k), g in preds.groupby(["model_key", "shots"], sort=False):
+        y, p = g["y_true"].to_numpy(int), g["pred"].to_numpy(int)
+        units = list(range(len(y)))
+        f1_ci = bootstrap_stat(units, lambda s: f1_failure(y[s], p[s]), n_boot, seed)
+        ba_ci = bootstrap_stat(units, lambda s: balanced_acc(y[s], p[s]), n_boot, seed)
+        out.append({"model_key": model, "shots": int(k), "n_rows": len(y),
+                    "f1_failure": f1_failure(y, p), "f1_ci_low": f1_ci[0], "f1_ci_high": f1_ci[1],
+                    "balanced_accuracy": balanced_acc(y, p), "ba_ci_low": ba_ci[0], "ba_ci_high": ba_ci[1]})
+    return pd.DataFrame(out)
 
 
 def h12_table(preds: pd.DataFrame, logreg: dict, n_boot: int, seed: int) -> pd.DataFrame:
@@ -613,8 +640,8 @@ def paired_conditions(a: pd.DataFrame, b: pd.DataFrame, on: list[str]) -> pd.Dat
 
 def compare_conditions(pairs: pd.DataFrame, by: str | None, n_boot: int, seed: int,
                        cluster: str = "task_id", pooled: bool = True) -> pd.DataFrame:
-    """Точность в условиях a и b, разница (a − b) с бутстреп-CI по задачам, Макнемар; по группам by
-    и (pooled=True) по всем вместе — строка «все»."""
+    """Точность в условиях a и b (каждая с бутстреп-CI по задачам), разница (a − b) с бутстреп-CI, Макнемар;
+    по группам by и (pooled=True) по всем вместе — строка «все». Названия условий вместо a/b — name_conditions."""
     groups = [*pairs.groupby(by, sort=False)] if by else []
     if pooled or not by:
         groups.append(("все", pairs))
@@ -623,13 +650,28 @@ def compare_conditions(pairs: pd.DataFrame, by: str | None, n_boot: int, seed: i
         g = g[g["correct_a"].apply(binary) & g["correct_b"].apply(binary)]
         d = g.assign(diff=g["correct_a"] - g["correct_b"])
         ci = cluster_bootstrap(d, "diff", cluster_col=cluster, n_boot=n_boot, seed=seed)
+        ci_a = cluster_bootstrap(g, "correct_a", cluster_col=cluster, n_boot=n_boot, seed=seed)
+        ci_b = cluster_bootstrap(g, "correct_b", cluster_col=cluster, n_boot=n_boot, seed=seed)
         test = mcnemar_test(g["correct_a"], g["correct_b"])
-        out.append({(by or "group"): key, "n_pairs": len(g), "acc_a": g["correct_a"].mean(),
-                    "acc_b": g["correct_b"].mean(), "diff_a_minus_b": d["diff"].mean(),
+        out.append({(by or "group"): key, "n_pairs": len(g),
+                    "acc_a": g["correct_a"].mean(), "acc_a_ci_low": ci_a[0], "acc_a_ci_high": ci_a[1],
+                    "acc_b": g["correct_b"].mean(), "acc_b_ci_low": ci_b[0], "acc_b_ci_high": ci_b[1],
+                    "diff_a_minus_b": d["diff"].mean(),
                     "diff_ci_low": ci[0], "diff_ci_high": ci[1],
                     "only_a_correct": test["only_first"], "only_b_correct": test["only_second"],
                     "mcnemar_p": test["p_value"]})
     return pd.DataFrame(out)
+
+
+def name_conditions(table: pd.DataFrame, a: str, b: str) -> pd.DataFrame:
+    """Столбцы compare_conditions с названиями условий: acc_a → acc_<a>, diff_a_minus_b → diff_<a>_minus_<b> и т. д."""
+    cols = {}
+    for x, name in [("a", a), ("b", b)]:
+        for suffix in ["", "_ci_low", "_ci_high"]:
+            cols[f"acc_{x}{suffix}"] = f"acc_{name}{suffix}"
+        cols[f"only_{x}_correct"] = f"only_{name}_correct"
+    cols["diff_a_minus_b"] = f"diff_{a}_minus_{b}"
+    return table.rename(columns=cols)
 
 
 def h1_pairs(main: pd.DataFrame) -> pd.DataFrame:
@@ -743,8 +785,7 @@ def h6_tables(main: pd.DataFrame, cot: pd.DataFrame, models: dict, pricing: dict
     pairs["group"] = [f"{t}: " + ("CoT-промпт" if c == m else f"режим рассуждений ({c})")
                       for t, c, m in zip(pairs["type"], pairs["cot_model"], pairs["model_key"])]
     acc = compare_conditions(pairs.sort_values("group"), "group", n_boot, seed, pooled=False)
-    acc = acc.rename(columns={"acc_a": "acc_cot", "acc_b": "acc_main", "diff_a_minus_b": "diff_cot_minus_main",
-                              "only_a_correct": "only_cot_correct", "only_b_correct": "only_main_correct"})
+    acc = name_conditions(acc, "cot", "main")
     cot_c = add_cost(cot, pricing, models)
     main_c = add_cost(main[main["task_id"].isin(cot["task_id"])], pricing, models)
     tok = []
@@ -779,9 +820,7 @@ def h7_tables(main: pd.DataFrame, votes: pd.DataFrame, repeats: pd.DataFrame, gr
     v = v.join(n_ok, on=["model_key", "task_id"])
     v["n_ok"] = v["n_ok"].fillna(0)
     pairs = paired_conditions(v, main, ["model_key", "task_id"])
-    acc = compare_conditions(pairs, "model_key", n_boot, seed).rename(
-        columns={"acc_a": "acc_vote", "acc_b": "acc_main", "diff_a_minus_b": "diff_vote_minus_main",
-                 "only_a_correct": "only_vote_correct", "only_b_correct": "only_main_correct"})
+    acc = name_conditions(compare_conditions(pairs, "model_key", n_boot, seed), "vote", "main")
     v["spread"] = (v["n_groups"] > 1) | (v["n_voted"] < v["n_ok"])
     spread = []
     for model, g in [*v.groupby("model_key", sort=False), ("все", v)]:
@@ -851,6 +890,24 @@ def h13_summary(costs: pd.DataFrame, main: pd.DataFrame) -> dict:
 
 # ---------- Экспорт ----------
 
+# ---------- Методика: состав банка и вызовы моделей ----------
+
+def bank_summary(tasks: list[dict]) -> dict:
+    """Состав банка для раздела «Методика»: число задач, своих (source = свои), статусы эталонов
+    и таблицы «тип × тема / источник / вариант» (те же, что печатает .venv/bin/python -m src.bank stats)."""
+    tables = {name: t.reset_index().rename(columns=str) for name, t in bank.stats_tables(tasks).items()}
+    return {"n_tasks": len(tasks), "n_own": sum(t["source"] == "свои" for t in tasks),
+            "status": {s: sum(t["reference_status"] == s for t in tasks) for s in bank.STATUSES},
+            "tables": tables}
+
+
+def runs_summary(log_path: Path, models: dict) -> dict:
+    """Вызовы по журналу (те же функции, что в src.manifest): по экспериментам — даты, записи, ошибки, повторы;
+    по моделям (без smoke и dev) — model_requested, model_reported, даты, температура, токены."""
+    records = run_bank.read_jsonl(log_path)
+    return {"calls_by_experiment": manifest.by_experiment(records), "models": manifest.by_model(records, models)}
+
+
 def to_records(df: pd.DataFrame) -> list[dict]:
     """DataFrame → список словарей для JSON (NaN → null)."""
     if df is None or df.empty:
@@ -893,7 +950,6 @@ def write_summary(summary: dict, path: Path) -> None:
 
 def input_fingerprints(p: dict) -> dict:
     """sha256 (первые 12 знаков) входных файлов: по ним видно, из каких данных посчитаны числа."""
-    import hashlib
     files = sorted(p["results"].glob("*.jsonl")) + sorted(p["results"].glob("*.csv")) \
         + sorted(p["grading"].glob("*.csv")) + [p["pricing"], ROOT / "config" / "experiment.json"]
     out = {}
@@ -934,12 +990,16 @@ def save_fig(fig, name: str, figures_dir: Path, demo: bool) -> Path:
 
 def plot_two_conditions(table: pd.DataFrame, label_col: str, a_col: str, b_col: str,
                         a_name: str, b_name: str, title: str, ylabel: str = "точность"):
-    """Парные столбики «условие a / условие b» по группам (модели или типы). Возвращает fig."""
+    """Парные столбики «условие a / условие b» по группам (модели или типы), с 95% CI, если в таблице есть
+    столбцы <a_col>_ci_low/_ci_high. Возвращает fig."""
     import matplotlib.pyplot as plt
     fig, ax = plt.subplots(figsize=(1.6 * len(table) + 2, 3.6))
     x = np.arange(len(table))
-    ax.bar(x - 0.19, table[a_col], width=0.36, color="#2a78d6", label=a_name)
-    ax.bar(x + 0.19, table[b_col], width=0.36, color="#eb6834", label=b_name)
+    for dx, col, color, name in [(-0.19, a_col, "#2a78d6", a_name), (0.19, b_col, "#eb6834", b_name)]:
+        err = None
+        if f"{col}_ci_low" in table:     # 95% CI из compare_conditions — усы над столбиком
+            err = [(table[col] - table[f"{col}_ci_low"]).clip(lower=0), (table[f"{col}_ci_high"] - table[col]).clip(lower=0)]
+        ax.bar(x + dx, table[col], width=0.36, color=color, label=name, yerr=err, ecolor="#52514e", capsize=3)
     for i, (va, vb) in enumerate(zip(table[a_col], table[b_col])):
         for dx, v in [(-0.19, va), (0.19, vb)]:
             if pd.notna(v):

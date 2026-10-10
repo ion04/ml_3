@@ -5,14 +5,15 @@
   .venv/bin/python -m src.server_info --write --note "..."  # дописать в results/run_manifest.json → "ollama_server"
 
 Сведения собираются одной командой по ssh (hostname, ОС, CPU, RAM, GPU, версия Ollama, ID модели).
-Linux-сервер (home): bash-скрипт REMOTE_SCRIPT. Windows-ПК (gpu): PowerShell-скрипт WINDOWS_SCRIPT,
+Основной вариант — Windows-ПК gpu (Ollama там запускает scripts/gpu_ollama.sh): PowerShell-скрипт WINDOWS_SCRIPT,
 а версия Ollama и список моделей берутся из API Ollama по OLLAMA_BASE_URL (ollama.exe там не в PATH).
+Для Linux-сервера (запасной вариант) — bash-скрипт REMOTE_SCRIPT.
 Остальные поля run_manifest.json (шаг 08) не трогаются: файл читается и обновляется по ключу.
 """
 
 import argparse
-import json
 import base64
+import json
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -23,7 +24,7 @@ from src import llm
 
 MANIFEST = llm.ROOT / "results" / "run_manifest.json"
 
-# Каждая строка вывода — «ключ=значение». Команды, которых нет на сервере, дают пустое значение.
+# Linux-сервер. Каждая строка вывода — «ключ=значение». Команды, которых нет на сервере, дают пустое значение.
 REMOTE_SCRIPT = r"""
 export LC_ALL=C   # иначе lscpu и free печатают заголовки на языке системы (например, по-русски)
 echo "hostname=$(hostname)"
@@ -135,7 +136,7 @@ def main(argv=None) -> int:
     print(json.dumps(info, ensure_ascii=False, indent=2))
     if args.write:
         write_manifest(info)
-        print(f"Записано: results/run_manifest.json → ollama_server")
+        print("Записано: results/run_manifest.json → ollama_server")
     return 0
 
 

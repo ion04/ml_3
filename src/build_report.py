@@ -1,10 +1,10 @@
 """Каркас отчёта ЛР3 → report/report.md (шаг 12). Структура — «Структура отчёта по ЛР» из PDF.
 
 Откуда берутся числа (руками ничего не вписывается):
-  results/summary_metrics.json  все метрики (его пишет analysis.ipynb, раздел 8);
-  results/run_manifest.json     модели, model_reported, даты и число вызовов, железо локальной модели, окружение;
+  results/summary_metrics.json  все числа: метрики, состав банка (bank), вызовы моделей и даты (runs) —
+                                его пишет analysis.ipynb, раздел 8;
+  results/run_manifest.json     версия и отпечаток промпта, окружение, железо локальной модели, отпечаток разбиения E;
   config/*.json                 модели, параметры эксперимента, тарифы;
-  data/tasks.jsonl              состав банка (таблица «тип × тема»);
   hypotheses.md                 гипотезы и прогноз — в версии из последнего коммита, изменившего файл;
   src/prompts.py                полный текст промпта.
 Если чего-то нет, в отчёте стоит «нет данных».
@@ -30,7 +30,7 @@ import sys
 from pathlib import Path
 
 from src import analysis as an
-from src import bank, blind, checks, llm, prompts, run_bank
+from src import blind, checks, llm, prompts, run_bank
 
 ROOT = run_bank.ROOT
 NO_DATA = "_нет данных_"
@@ -136,13 +136,6 @@ def md_table(rows: list[dict], columns: list | None = None) -> str:
     return "\n".join(lines)
 
 
-def df_table(df) -> str:
-    """Таблица pandas (crosstab) → markdown: индекс становится первым столбцом."""
-    flat = df.reset_index()
-    flat.columns = [str(c) for c in flat.columns]
-    return md_table(flat.to_dict("records"))
-
-
 def kv_list(d: dict) -> str:
     return "\n".join(f"- `{k}`: {fmt_key(k, v)}" for k, v in d.items()) if d else NO_DATA
 
@@ -222,9 +215,9 @@ def section_intro(h: Human, cfg: dict) -> str:
     ])
 
 
-def models_rows(models_cfg: dict, manifest: dict | None, demo: bool) -> list[dict]:
-    """Строка на модель: идентификатор в запросе, model_reported из ответов API, даты, параметры."""
-    used = (manifest or {}).get("models") or {}
+def models_rows(models_cfg: dict, used: dict, demo: bool) -> list[dict]:
+    """Строка на модель: идентификатор в запросе, model_reported из ответов API, даты, параметры.
+    used — summary["runs"]["models"] (посчитано в analysis.ipynb по журналу)."""
     keys = [k for k, m in models_cfg.items() if m["enabled"] and m["provider"] != "mock"] if not demo else []
     keys += [k for k in used if k not in keys]
     rows = []
@@ -256,24 +249,26 @@ def prompt_text(langs: list[str]) -> str:
         parts += [f"#### Язык {lang}: варианты",
                   f"- `cot` (H6), добавляется после условия:\n\n{fence(prompts.COT[lang])}",
                   f"- `followup_doubt` (H9), второй ход диалога:\n\n{fence(prompts.FOLLOWUP_DOUBT[lang])}",
-                  f"- `classify_row` (тип E): инструкция, примеры, строка-запрос, формат `label`:\n\n"
+                  "- `classify_row` (тип E): инструкция, примеры, строка-запрос, формат `label`:\n\n"
                   + fence("\n".join(f"{k}: {v}" for k, v in c.items()))]
     return "\n\n".join(parts)
 
 
-def bank_section(tasks: list[dict], cfg: dict, manifest: dict | None) -> str:
-    tables = bank.stats_tables(tasks)
-    n = len(tasks)
-    own = sum(t["source"] == "свои" for t in tasks)
-    status = {s: sum(t["reference_status"] == s for t in tasks) for s in bank.STATUSES}
+def bank_section(info: dict, cfg: dict, manifest: dict | None) -> str:
+    """Состав банка из summary["bank"] (analysis.ipynb, an.bank_summary); нет summary — «нет данных»."""
+    tables = info.get("tables") or {}
+    n, own = info.get("n_tasks"), info.get("n_own")
     e = cfg.get("typeE", {})
     split_hash = (manifest or {}).get("typeE_split_hash")
-    return "\n\n".join([
-        f"Задач в банке: {n}; придуманы самостоятельно (`source = свои`): {own} ({own / n:.0%})." if n else NO_DATA,
-        "Статус эталонов: " + ", ".join(f"{k} — {v}" for k, v in status.items()) + ".",
-        "**Тип × тема**", df_table(tables["тип × тема"]),
-        "**Тип × источник**", df_table(tables["тип × источник"]),
-        "**Тип × вариант** (пары для H1/H3, лишние данные)", df_table(tables["тип × вариант"]),
+    if n:
+        parts = [f"Задач в банке: {n}; придуманы самостоятельно (`source = свои`): {own} ({own / n:.0%}).",
+                 "Статус эталонов: " + ", ".join(f"{k} — {v}" for k, v in info["status"].items()) + ".",
+                 "**Тип × тема**", md_table(tables.get("тип × тема") or []),
+                 "**Тип × источник**", md_table(tables.get("тип × источник") or []),
+                 "**Тип × вариант** (пары для H1/H3, лишние данные)", md_table(tables.get("тип × вариант") or [])]
+    else:
+        parts = ["**Тип × тема**: " + NO_DATA + " (таблицы состава банка считает `analysis.ipynb`)"]
+    return "\n\n".join(parts + [
         f"**Тип E:** {e.get('dataset')}; тест {e.get('n_test')} строк ({e.get('test_mode')}, отказов "
         f"{e.get('n_test_failures')}); примеры в промпте {e.get('shots')}, из них отказов {e.get('shot_failures')}; "
         f"отпечаток разбиения `{split_hash or 'нет данных'}` (`data/e_split.json`, `data/README.md`).",
@@ -322,13 +317,14 @@ def grading_section(summary: dict | None, pricing: dict, cfg: dict) -> str:
 
 
 def section_methods(h: Human, cfg: dict, models_cfg: dict, manifest: dict | None, summary: dict | None,
-                    tasks: list[dict], pricing: dict) -> str:
+                    pricing: dict) -> str:
     man = manifest or {}
+    runs = (summary or {}).get("runs") or {}
     model_cols = [("role", "роль"), ("key", "ключ"), ("provider", "провайдер"),
                   ("model_requested", "модель в запросе"), ("model_reported", "model_reported (ответ API)"),
                   ("dates", "даты вызовов (UTC)"), ("temperature", "T"), ("params", "параметры"),
                   ("max_tokens", "max_tokens"), ("calls", "вызовов ok / ошибок")]
-    calls = [{"experiment": k, **v} for k, v in (man.get("calls_by_experiment") or {}).items()]
+    calls = [{"experiment": k, **v} for k, v in (runs.get("calls_by_experiment") or {}).items()]
     pr = man.get("prompt") or {}
     prompt_note = (f"Промпт в config: версия `{pr.get('version_config')}`, отпечаток `{pr.get('hash_config')}`; "
                    f"в коде: `{pr.get('version_code')}`, `{pr.get('hash_code')}`." if pr else NO_DATA)
@@ -347,9 +343,9 @@ def section_methods(h: Human, cfg: dict, models_cfg: dict, manifest: dict | None
     return "\n\n".join([
         "## 2. Методика",
         "### 2.1. Модели",
-        md_table(models_rows(models_cfg, manifest, bool(man.get("demo"))), model_cols),
-        "Даты, `model_reported`, температура и число вызовов — из журнала `logs/calls.jsonl` "
-        "(`results/run_manifest.json`, раздел `models`; вызовы smoke и dev не входят).",
+        md_table(models_rows(models_cfg, runs.get("models") or {}, bool((summary or {}).get("demo"))), model_cols),
+        "Даты, `model_reported`, температура и число вызовов посчитаны в `analysis.ipynb` по журналу "
+        "`logs/calls.jsonl` (`summary_metrics.json` → `runs`; вызовы smoke и dev в таблицу моделей не входят).",
         "**Вызовы по экспериментам** (все записи журнала, включая повторы после технических ошибок)",
         md_table(calls, ["experiment", "first_utc", "last_utc", "records", "ok", "errors", "retried_requests",
                          "unresolved_requests"]) if calls else NO_DATA,
@@ -364,7 +360,7 @@ def section_methods(h: Human, cfg: dict, models_cfg: dict, manifest: dict | None
         "### 2.4. Промпт",
         prompt_text(cfg.get("languages") or ["ru"]),
         "### 2.5. Банк задач",
-        bank_section(tasks, cfg, manifest),
+        bank_section((summary or {}).get("bank") or {}, cfg, manifest),
         "### 2.6. Способ проверки",
         grading_section(summary, pricing, cfg),
         h("methods_extra", "дополнения к методике: состав команды, кто проверял вслепую, решения по TLS и тарифам; "
@@ -409,7 +405,7 @@ def hypothesis_block(h: Human, hid: str, data: dict | None, prediction: dict | N
             parts.append(f"`{name}`")
             if isinstance(value, list):
                 parts.append(md_table(value))
-            elif isinstance(value, dict) and all(isinstance(v, list) for v in value.values()):  # H10 bins
+            elif isinstance(value, dict) and all(isinstance(v, list) for v in value.values()):  # H10: корзины ECE
                 parts += [f"{k}:\n\n{md_table(v)}" for k, v in value.items()]
             elif isinstance(value, dict):
                 parts.append(kv_list(value))
@@ -424,13 +420,11 @@ def hypothesis_block(h: Human, hid: str, data: dict | None, prediction: dict | N
 
 
 def section_results(h: Human, summary: dict | None, cfg: dict, figures_dir: Path) -> str:
-    if not summary:
-        missing = ("_Нет данных: `results/summary_metrics.json` ещё не создан. Он появится после прогонов "
-                   "(шаги 08–09), ручной проверки (G2) и `scripts/run_analysis.sh` (шаг 11)._")
     s = summary or {}
     parts = ["## 3. Результаты"]
     if not summary:
-        parts.append(missing)
+        parts.append("_Нет данных: `results/summary_metrics.json` ещё не создан. Он появится после прогонов "
+                     "(шаги 08–09), ручной проверки (G2) и `scripts/run_analysis.sh` (шаг 11)._")
     counts = s.get("counts") or {}
     parts += ["### 3.1. Объём данных", kv_list(counts)]
 
@@ -457,6 +451,8 @@ def section_results(h: Human, summary: dict | None, cfg: dict, figures_dir: Path
               md_table(s.get("typeE") or [],
                        ["source", "model", "model_reported", "lang", "shots", "train_set", "eval_set", "n_eval", "coverage", "f1_failure",
                         "balanced_accuracy", "accuracy", "f1_failure_sd", "balanced_accuracy_sd", "complete"]),
+              "**F1 «отказа» и balanced accuracy с 95% CI (бутстреп строк теста; LLM и LogReg на тех же примерах)**",
+              md_table(s.get("typeE_ci") or []),
               figure("typeE_shots", figures_dir, "тип E: F1 «отказа» и balanced accuracy от числа примеров"),
               "### 3.7. Цена и скорость",
               md_table(s.get("cost") or [],
@@ -495,20 +491,19 @@ def section_errors(h: Human, errors_path: Path) -> str:
     return "\n\n".join(parts)
 
 
-def limitation_facts(cfg: dict, manifest: dict | None, summary: dict | None, pricing: dict,
-                     tasks: list[dict]) -> list[str]:
+def limitation_facts(cfg: dict, manifest: dict | None, summary: dict | None, pricing: dict) -> list[str]:
     """Факты из файлов, которые могут пригодиться для раздела ограничений (не формулировки ограничений)."""
     e = cfg.get("typeE", {})
     man, s = manifest or {}, summary or {}
     facts = [f"тип E: тест `{e.get('test_mode')}`, {e.get('n_test')} строк, из них отказов "
              f"{e.get('n_test_failures')} (`config/experiment.json` → `typeE`)",
-             f"банк: {len(tasks)} задач, по типам " + ", ".join(
-                 f"{t} — {sum(x['type'] == t for x in tasks)}" for t in bank.FINAL_TYPES),
+             f"банк: {(s.get('bank') or {}).get('n_tasks', 'нет данных')} задач "
+             "(`summary_metrics.json` → `bank`, таблицы — раздел 2.5)",
              f"тарифы сверены человеком: {fmt(pricing.get('verified_by_human'))} (`config/pricing.json`)"]
     note = (man.get("ollama_server") or {}).get("note")
     if note:
         facts.append(f"железо локальной модели: {note} (`run_manifest.json` → `ollama_server.note`)")
-    unresolved = {k: v.get("unresolved_requests") for k, v in (man.get("calls_by_experiment") or {}).items()
+    unresolved = {k: v.get("unresolved_requests") for k, v in ((s.get("runs") or {}).get("calls_by_experiment") or {}).items()
                   if v.get("unresolved_requests")}
     if unresolved:
         facts.append(f"запросы без ответа после повторов: {unresolved}")
@@ -542,7 +537,6 @@ def build(demo: bool, old_text: str = "") -> tuple[str, list[tuple[str, bool]]]:
     cfg = run_bank.load_experiment()
     models_cfg = llm.load_models()
     pricing = an.load_pricing(an.paths(demo)["pricing"])
-    tasks = bank.load_tasks(bank.BANK_PATH)
     h = Human(old_text)
 
     summary_sha = (hashlib.sha256(p["summary"].read_bytes()).hexdigest()[:12] if summary else "нет данных")
@@ -551,7 +545,7 @@ def build(demo: bool, old_text: str = "") -> tuple[str, list[tuple[str, bool]]]:
         header.append("> **ДЕМО: mock-модели и случайные оценки. Это не результаты эксперимента.**")
     header += [
         "> Файл собирает `.venv/bin/python -m src.build_report` из `results/summary_metrics.json` "
-        f"(sha256 `{summary_sha}`), `results/run_manifest.json`, `config/*.json`, `data/tasks.jsonl`, "
+        f"(sha256 `{summary_sha}`; его пишет `analysis.ipynb`), `results/run_manifest.json` (версии, отпечатки, железо), `config/*.json`, "
         "`hypotheses.md` (версия из коммита) и `src/prompts.py`. Числа руками не править: после пересчёта "
         "`analysis.ipynb` пересоберите отчёт. Свой текст пишите только между строками `<!-- ЧЕЛОВЕК:… -->` и "
         "`<!-- /ЧЕЛОВЕК:… -->`: при пересборке он сохраняется.",
@@ -560,10 +554,10 @@ def build(demo: bool, old_text: str = "") -> tuple[str, list[tuple[str, bool]]]:
     sections = [
         "\n\n".join(header),
         section_intro(h, cfg),
-        section_methods(h, cfg, models_cfg, manifest, summary, tasks, pricing),
+        section_methods(h, cfg, models_cfg, manifest, summary, pricing),
         section_results(h, summary, cfg, p["figures"]),
         section_errors(h, p["errors"]),
-        section_limits_recs(h, limitation_facts(cfg, manifest, summary, pricing, tasks)),
+        section_limits_recs(h, limitation_facts(cfg, manifest, summary, pricing)),
         "## Приложение: воспроизводимость\n\nПорядок «с нуля до отчёта» — `README.md`; проверка в чистом окружении "
         "— `docs/reproducibility.md` (`scripts/check_reproducibility.sh`). Вопросы самоконтроля — "
         "[`selfcheck_questions.md`](selfcheck_questions.md), план доклада — [`slides_outline.md`](slides_outline.md).",

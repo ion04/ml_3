@@ -24,7 +24,7 @@ results/typeE_llm.jsonl (одна строка = один ответ; сырые
 import argparse
 import sys
 
-from src import checks, prompts, run_bank, typeE
+from src import checks, llm, prompts, run_bank, typeE
 
 VARIANT = "classify_row"
 
@@ -131,7 +131,6 @@ def main(argv=None) -> int:
 
     if args.estimate:
         # Для оценки берём все включённые реальные модели, даже без ключей (вызовов нет).
-        from src import llm
         models = [k for k, m in llm.load_models().items() if m["enabled"] and m["provider"] != "mock"]
         if args.models != "all":
             models = run_bank.parse_list(args.models)

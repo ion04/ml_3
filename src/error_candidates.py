@@ -27,7 +27,7 @@ from pathlib import Path
 import pandas as pd
 
 from src import analysis as an
-from src import bank, blind, checks, grade, run_bank, typeE, typeE_metrics
+from src import autograde, bank, blind, checks, grade, run_bank, typeE, typeE_metrics
 from src.build_report import fence
 
 HIGH_CONF = 90          # «высокая уверенность», %
@@ -108,9 +108,9 @@ def textbook_answers(main: pd.DataFrame, tasks: dict) -> list[dict]:
         orig = originals.get(r["pair_id"])
         if orig is None or not isinstance(orig.get("reference"), (int, float, list)):
             continue
-        if same_answer(r["value"], orig["reference"], orig.get("tolerance") or 0.01):
+        if same_answer(r["value"], orig["reference"], orig.get("tolerance") or grade.DEFAULT_TOLERANCE):
             out.append(cand("textbook_answer", r, r["confidence"] if pd.notna(r["confidence"]) else 0,
-                            note=f"эталон оригинала {orig['id']}: {an_fmt(orig['reference'])}"))
+                            note=f"эталон оригинала {orig['id']}: {fmt_value(orig['reference'])}"))
     return out
 
 
@@ -183,11 +183,12 @@ def select(pools: dict[str, list[dict]]) -> list[dict]:
     return chosen
 
 
-def an_fmt(v) -> str:
+def fmt_value(v) -> str:
+    """Значение для текста: дробь в кратком виде (0.161), список через «; »."""
     if isinstance(v, float):
         return f"{v:g}"
     if isinstance(v, list):
-        return "; ".join(an_fmt(x) for x in v)
+        return "; ".join(fmt_value(x) for x in v)
     return str(v)
 
 
@@ -195,7 +196,7 @@ def short_value(v) -> str:
     """Значение из разбора; код D и текст C длинные — они и так есть в цитате."""
     if isinstance(v, str) and ("\n" in v or len(v) > 80):
         return "(текст ответа — см. цитату)"
-    return an_fmt(v)
+    return fmt_value(v)
 
 
 def quote(text: str | None) -> str:
@@ -235,7 +236,7 @@ def render(chosen: list[dict], tasks: dict, log: dict, demo: bool, lang: str) ->
             lines += [f"- Задача: `{c['task_id']}` (тип {t.get('type')}, тема {t.get('topic')}, источник "
                       f"{t.get('source')}, вариант {t.get('variant') or '—'}). "
                       f"Условие: «{text[:400]}{'…' if len(text) > 400 else ''}»"]
-            reference = an_fmt(t.get("reference"))
+            reference = fmt_value(t.get("reference"))
             if t.get("tolerance") is not None:
                 reference += f" (допуск {t['tolerance']})"
             if t.get("reference_metric") is not None:
@@ -243,7 +244,7 @@ def render(chosen: list[dict], tasks: dict, log: dict, demo: bool, lang: str) ->
         lines += [f"- Модель: `{c['model_key']}`, model_reported `{rec.get('model_reported')}`, "
                   f"вызов {str(rec.get('ts_utc'))[:19]} UTC; эксперимент `{c['experiment']}`, язык {c['lang']}",
                   f"- Эталон: {reference}",
-                  f"- Разбор ответа: значение {short_value(c['value'])}, уверенность {an_fmt(c['confidence'])}, "
+                  f"- Разбор ответа: значение {short_value(c['value'])}, уверенность {fmt_value(c['confidence'])}, "
                   f"оценка: {c.get('reason') or '—'}"]
         if c.get("note"):
             lines.append(f"- Отмечено: {c['note']}")
@@ -259,7 +260,7 @@ def build(demo: bool, lang: str = "ru") -> tuple[str, int]:
     graded = an.read_table(p["results"], "graded_auto")
     main, _ = an.answers(p["results"], "main", lang, manual, graded)
     follow, _ = an.answers(p["results"], "followup_doubt", lang, manual, graded)
-    d_exec = {r["call_id"]: r for r in run_bank.read_jsonl(p["results"] / "d_exec.jsonl")}
+    d_exec = autograde.d_exec_records(p["results"])
     pools = {"e_confident_miss": e_misses(p["results"], lang)}
     if not main.empty:
         pools |= {"high_conf_wrong": high_conf_wrong(main), "flip": flips(main, follow),

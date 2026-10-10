@@ -117,8 +117,11 @@ def test_duplicate_ids_and_dev_overlap():
     assert any("повторяются" in e for e in errors_of([a, b]))
     dev = make_task(id="A1")
     assert any("dev-задачами" in e for e in errors_of([make_task(id="A1")], dev=[dev]))
-    # dev-задача должна быть verified.
+    # dev-задача: todo нельзя никогда; черновик агента — можно до гейта G1, но не в --final.
     assert any("dev" in e for e in errors_of([make_task()], dev=[make_task(id="dev-1", reference_status="todo")]))
+    draft = [make_task(id="dev-1", reference_status="agent_draft")]
+    assert not any("dev" in e for e in errors_of([make_task()], dev=draft))
+    assert any("dev-1" in e for e in errors_of([make_task()], dev=draft, final=True))
 
 
 def test_final_rules():
@@ -132,6 +135,13 @@ def test_final_rules():
         if t["type"] == "B":
             t["reference"] = False
     assert any("ложных" in e for e in errors_of(unbalanced, final=True))
+    # Сдвиг баланса на одну задачу тоже ошибка: в задании «половина», а не «примерно половина».
+    off_by_one = copy.deepcopy(tasks)
+    b_tasks = [t for t in off_by_one if t["type"] == "B"]
+    n_false = sum(t["reference"] is False for t in b_tasks)
+    assert n_false * 2 == len(b_tasks)              # в final_bank ровно половина
+    next(t for t in b_tasks if t["reference"] is True)["reference"] = False
+    assert any("ложных" in e for e in errors_of(off_by_one, final=True))
     # Своих меньше половины.
     textbook = copy.deepcopy(tasks)
     for t in textbook:

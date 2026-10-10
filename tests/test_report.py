@@ -204,3 +204,20 @@ def test_real_mode_needs_g2(monkeypatch, tmp_path):
     monkeypatch.setattr(ec, "out_path", lambda demo: tmp_path / "error_candidates.md")
     assert ec.main([]) == 1
     assert not (tmp_path / "error_candidates.md").exists()
+
+
+def test_bank_and_runs_come_from_summary(paths):
+    # Состав банка и вызовы моделей отчёт берёт из summary (их считает analysis.ipynb), а не из data/ и манифеста.
+    from src import analysis as an, bank
+    tasks = bank.load_tasks(bank.BANK_PATH)
+    runs = {"calls_by_experiment": {"main": {"records": 7, "ok": 6, "errors": 1, "unresolved_requests": 1}},
+            "models": {"m1": {"model_requested": ["M-1"], "model_reported": ["M-1-2026"], "ok": 6, "errors": 1,
+                              "first_utc": "2026-11-01T10:00:00", "last_utc": "2026-11-02T10:00:00"}}}
+    summary = an.clean({"demo": False, "bank": an.bank_summary(tasks), "runs": runs})
+    write_json(paths["summary"], summary)
+    text, _ = br.build(demo=False)
+    assert f"Задач в банке: {len(tasks)}" in text and "| type | bayes |" in text
+    assert "M-1-2026" in text and "2026-11-01 … 2026-11-02" in text and "| main |" in text
+    assert "запросы без ответа после повторов: {'main': 1}" in text
+    write_json(paths["summary"], {"demo": False})
+    assert "Задач в банке" not in br.build(demo=False)[0]

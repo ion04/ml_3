@@ -38,23 +38,16 @@ END = "<!-- AUTO:END -->"
 def dev_calls(log_path: Path = None) -> list[dict]:
     """Записи журнала с experiment=dev. Если вызов повторяли из-за технической ошибки,
     берётся последняя успешная попытка (или последняя ошибка, если успешных нет)."""
-    path = Path(log_path or llm.REAL_LOG)
-    if not path.exists():
-        return []
     latest = {}
-    with open(path, encoding="utf-8") as f:
-        for line in f:
-            if not line.strip():
-                continue
-            rec = json.loads(line)
-            meta = rec.get("meta") or {}
-            if meta.get("experiment") != "dev":
-                continue
-            key = (rec["model_key"], meta.get("prompt_version"), meta.get("variant"), meta.get("lang"),
-                   meta.get("task_id"), meta.get("shots"), meta.get("repeat"), rec.get("cache_key"))
-            old = latest.get(key)
-            if old is None or rec.get("error") is None or old.get("error") is not None:
-                latest[key] = rec
+    for rec in run_bank.read_jsonl(Path(log_path or llm.REAL_LOG)):
+        meta = rec.get("meta") or {}
+        if meta.get("experiment") != "dev":
+            continue
+        key = (rec["model_key"], meta.get("prompt_version"), meta.get("variant"), meta.get("lang"),
+               meta.get("task_id"), meta.get("shots"), meta.get("repeat"), rec.get("cache_key"))
+        old = latest.get(key)
+        if old is None or rec.get("error") is None or old.get("error") is not None:
+            latest[key] = rec
     return list(latest.values())
 
 

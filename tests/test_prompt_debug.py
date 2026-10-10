@@ -52,7 +52,7 @@ def test_format_checks(tmp_path):
     assert by[("m2", "dev-D1")]["parse_ok"] and not by[("m2", "dev-D1")]["format_ok"]   # два блока кода
     assert by[("m2", "dev-F1")]["error"]
     assert by[("m2", "E5")]["parse_ok"]
-    assert f"| m1 | 5/5 · 5/5 |" in text
+    assert "| m1 | 5/5 · 5/5 |" in text
 
 
 def test_retry_keeps_successful_attempt(tmp_path):

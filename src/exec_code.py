@@ -38,7 +38,7 @@ from pathlib import Path
 from src import bank, grade, parse, run_bank
 
 ROOT = run_bank.ROOT
-PYTHON = ROOT / ".venv" / "bin" / "python"
+PYTHON = bank.PYTHON   # .venv/bin/python проекта
 TIMEOUT_S = 300
 MAX_OUTPUT_CHARS = 20000   # stdout/stderr длиннее обрезаются (начало и конец сохраняются)
 

@@ -22,13 +22,16 @@ grade_auto(task, parsed) -> {"correct": bool | None, "score": float | None, "rea
 from src.parse import CANNOT, ParsedAnswer
 
 DEFAULT_TOLERANCE = 0.01
+# Запас на погрешность дробных чисел в компьютере: 0.505 − 0.5 = 0.0050000000000000044 > 0.005,
+# хотя это ровно 1%. Без запаса граница допуска засчитывалась бы то так, то нет (101 vs 100 — да, 0.505 vs 0.5 — нет).
+FLOAT_SLACK = 1e-9
 
 
 def close(answer: float, reference: float, tol: float) -> bool:
-    """Совпадение с относительным допуском (абсолютным при эталоне 0)."""
+    """Совпадение с относительным допуском (абсолютным при эталоне 0). Граница входит в допуск."""
     if reference == 0:
-        return abs(answer) <= tol
-    return abs(answer - reference) <= tol * abs(reference)
+        return abs(answer) <= tol + FLOAT_SLACK
+    return abs(answer - reference) <= tol * abs(reference) * (1 + FLOAT_SLACK)
 
 
 def number_matches(answer: float, reference: float, tol: float, had_percent: bool) -> bool:

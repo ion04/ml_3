@@ -214,7 +214,7 @@ def main(argv=None) -> int:
     table.to_csv(path, index=False, float_format="%.6f")
     n_llm = int((table["source"] == "llm").sum())
     n_incomplete = int(((table["source"] == "llm") & ~table["complete"].astype(bool)).sum())
-    print(f"{path.relative_to(typeE.ROOT) if path.is_relative_to(typeE.ROOT) else path}: "
+    print(f"{run_bank.show(path)}: "
           f"строк LLM {n_llm} (неполных {n_incomplete}), классических {len(table) - n_llm}")
     if n_llm == 0:
         print("  Ответов LLM типа E нет: в таблице только классические модели.")

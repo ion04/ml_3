@@ -10,11 +10,11 @@ from pathlib import Path
 
 import pytest
 
-from src import autograde, blind, checks, exec_code, llm, run_bank
+from src import autograde, blind, checks, exec_code, llm, run_bank, typeE
 from tests.test_runners import FIXTURE_BANK, bank_args, env  # noqa: F401  (env — фикстура pytest)
 
 TASKS = {t["id"]: t for t in run_bank.read_jsonl(FIXTURE_BANK)}
-SPLIT = autograde.current_split_hash()      # data/e_split.json закоммичен (шаг 06)
+SPLIT = typeE.current_split_hash()      # data/e_split.json закоммичен (шаг 06)
 
 
 def answer(task_id, text, model="m1", experiment="main", lang="ru", correct=None, error=None, **extra):

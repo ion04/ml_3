@@ -116,6 +116,8 @@ def rubric_text(task: dict) -> str:
     if task["type"] == "D":
         return ("Чек-лист (data/checklist_D.md): 1 — ошибка есть, 0 — нет, н/п — неприменимо.\n"
                 + "\n".join(f"{n}. {v}" for n, v in enumerate(CHECKLIST.values(), start=1)))
+    if not r:
+        return "РУБРИКА В БАНКЕ НЕ ЗАПОЛНЕНА — оценивайте по общим правилам grading/INSTRUCTIONS.md"
     parts = []
     if task["type"] == "B":
         parts += ["Ключевые аргументы:\n" + bullets(r.get("key_arguments"))]
@@ -126,8 +128,6 @@ def rubric_text(task: dict) -> str:
             parts.append("Дополнительно (не обязательно):\n" + bullets(r["bonus_arguments"]))
     parts += ["Типичные ошибки:\n" + bullets(r.get("typical_errors")),
               f"2 — {r.get('score_2', '')}\n1 — {r.get('score_1', '')}\n0 — {r.get('score_0', '')}"]
-    if not r:
-        return "РУБРИКА В БАНКЕ НЕ ЗАПОЛНЕНА — оценивайте по общим правилам grading/INSTRUCTIONS.md"
     return "\n\n".join(parts)
 
 

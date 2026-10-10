@@ -57,7 +57,7 @@ class LLMResult:
 # ---------- Конфиг моделей ----------
 
 def ollama_base_url(default: str) -> str:
-    """Адрес Ollama: OLLAMA_BASE_URL из .env (удалённый сервер), иначе base_url из конфига.
+    """Адрес Ollama: OLLAMA_BASE_URL из .env (ПК gpu через туннель scripts/gpu_ollama.sh), иначе base_url из конфига.
     Хвост /v1 (адрес OpenAI-совместимого API) отрезается: мы ходим в нативный /api/chat."""
     url = (os.getenv("OLLAMA_BASE_URL") or default).rstrip("/")
     return url[:-3] if url.endswith("/v1") else url
@@ -65,7 +65,7 @@ def ollama_base_url(default: str) -> str:
 
 def ollama_is_remote() -> bool:
     """Ollama на другом компьютере (задан OLLAMA_BASE_URL)? Тогда память через psutil не меряем:
-    даже при SSH-туннеле адрес localhost, а модель работает на сервере."""
+    при SSH-туннеле адрес localhost, а модель работает на ПК gpu."""
     return bool(os.getenv("OLLAMA_BASE_URL"))
 
 
@@ -550,7 +550,7 @@ def ask(model_key, prompt, temperature=0.0, *, system=None, history=None, max_to
             "local_vram_mb": None,
         }
         if provider == "ollama":
-            record["ollama_base_url"] = cfg["base_url"]    # где считалась локальная модель (ноутбук / сервер)
+            record["ollama_base_url"] = cfg["base_url"]    # где считалась локальная модель (ноутбук / ПК gpu)
             if error is None:
                 ps = ollama_ps(cfg["base_url"], model_id)
                 record["local_vram_mb"] = ps["size_vram_mb"] if ps else None

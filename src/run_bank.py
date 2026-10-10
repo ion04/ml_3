@@ -39,13 +39,13 @@ RESULTS_DIR = ROOT / "results"
 DEMO_DIR = ROOT / "demo"
 EXPERIMENT_PATH = ROOT / "config" / "experiment.json"
 
-# Сколько запросов одновременно отправлять одному сервису (провайдер + base_url).
-# GigaChat для физлиц обрабатывает запросы в один поток; локальная модель одна на GPU, и параллельные
-# запросы исказили бы замер задержки и памяти. Можно переопределить полем max_workers в config/models.json.
 # Код выхода «остались вызовы с технической ошибкой» (сеть, 429, 5xx). По нему scripts/run_experiments.sh
 # повторяет команду: дозапрашиваются только такие вызовы. Код 1 — прогон не запущен (не пройдены проверки).
 EXIT_TECH_ERRORS = 3
 
+# Сколько запросов одновременно отправлять одному сервису (провайдер + base_url).
+# GigaChat для физлиц обрабатывает запросы в один поток; локальная модель одна на GPU, и параллельные
+# запросы исказили бы замер задержки и памяти. Можно переопределить полем max_workers в config/models.json.
 WORKERS = {"gigachat": 1, "openai_compat": 3, "ollama": 1, "mock": 4}
 
 # Поля задачи, которые копируются в каждую строку результатов (для анализа без повторного чтения банка).
@@ -128,7 +128,7 @@ def select_models(spec: str, demo: bool, allow_disabled: bool = False) -> list[s
             print(f"  пропуск {key}: в .env нет {', '.join(llm.missing_env(cfg))}")
         elif cfg["provider"] == "ollama" and not ollama_alive(cfg["base_url"]):
             print(f"  пропуск {key}: Ollama не отвечает на {cfg['base_url']} (локально: brew services start ollama; "
-                  "сервер: OLLAMA_BASE_URL в .env, туннель ssh -N -L 11434:localhost:11434 home)")
+                  "ПК gpu: OLLAMA_BASE_URL в .env и scripts/ensure_gpu_ollama.sh)")
         else:
             chosen.append(key)
     return chosen
@@ -278,10 +278,20 @@ def row_key(row: dict) -> tuple:
 
 
 def read_jsonl(path: Path) -> list[dict]:
+    """Строки JSONL (пустые пропускаются); нет файла — пустой список."""
     if not path.exists():
         return []
     with open(path, encoding="utf-8") as f:
         return [json.loads(line) for line in f if line.strip()]
+
+
+def write_jsonl(path: Path, rows: list[dict]) -> None:
+    """Переписывает производную таблицу целиком: одна строка JSON на запись.
+    Журнал logs/calls.jsonl так не пишется: он только дописывается (llm._append_log)."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        for r in rows:
+            f.write(json.dumps(r, ensure_ascii=False) + "\n")
 
 
 def write_results(path: Path, rows: list[dict], key=row_key) -> None:
@@ -292,10 +302,7 @@ def write_results(path: Path, rows: list[dict], key=row_key) -> None:
     table = {key(r): r for r in read_jsonl(path)}
     for r in rows:
         table[key(r)] = r
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
-        for r in table.values():
-            f.write(json.dumps(r, ensure_ascii=False) + "\n")
+    write_jsonl(path, list(table.values()))
 
 
 def count_errors(rows: list[dict]) -> int:

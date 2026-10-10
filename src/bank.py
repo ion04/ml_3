@@ -35,7 +35,6 @@
 
 import argparse
 import json
-import re
 import subprocess
 import sys
 from pathlib import Path
@@ -100,13 +99,6 @@ def save_tasks(tasks: list[dict], path=BANK_PATH) -> None:
     with open(path, "w", encoding="utf-8") as f:
         for t in tasks:
             f.write(json.dumps(t, ensure_ascii=False) + "\n")
-
-
-def load_hypotheses(path=EXPERIMENT_PATH) -> list[str]:
-    if not Path(path).exists():
-        return []
-    with open(path, encoding="utf-8") as f:
-        return list(json.load(f).get("hypotheses", []))
 
 
 # ---------- Проверка одной задачи ----------
@@ -262,8 +254,15 @@ def validate(tasks: list[dict], dev_tasks: list[dict], final: bool = False,
         e, w = check_task(t)
         errors += ["dev " + x for x in e]
         warnings += ["dev " + x for x in w]
-        if t.get("reference_status") != "verified":
-            errors.append(f"dev {t.get('id')}: у dev-задачи статус должен быть verified")
+        # Эталон dev-задачи нужен с самого начала (отладка промпта), поэтому заготовка todo недопустима.
+        # Черновик агента (agent_draft) допустим до гейта G1; перед прогонами эталон подтверждает человек (--final).
+        status = t.get("reference_status")
+        if status == "todo" or (final and status != "verified"):
+            errors.append(f"dev {t.get('id')}: статус {status}, нужен verified (эталон подтверждает человек)")
+
+    dev_drafts = [str(t.get("id")) for t in dev_tasks if t.get("reference_status") == "agent_draft"]
+    if dev_drafts and not final:
+        warnings.append(f"dev-задачи с черновым эталоном агента ({len(dev_drafts)}): {', '.join(dev_drafts)}")
 
     ids = [str(t.get("id")) for t in tasks]
     dupes = sorted({i for i in ids if ids.count(i) > 1})
@@ -313,9 +312,10 @@ def validate(tasks: list[dict], dev_tasks: list[dict], final: bool = False,
         n = sum(t.get("type") == tp for t in tasks)
         if n < FINAL_MIN_PER_TYPE:
             errors.append(f"задач типа {tp}: {n}, нужно ≥{FINAL_MIN_PER_TYPE}")
-    # «Примерно половина» ложных: отклонение от n/2 не больше чем на 1 задачу.
-    if n_b and abs(n_false - n_b / 2) > 1:
-        errors.append(f"в типе B ложных {n_false} из {n_b}, нужно примерно половину")
+    # Задание: «половина утверждений должна быть ложной» — ровно n/2 (при нечётном n — любая из двух середин).
+    if n_b and abs(n_false - n_b / 2) > 0.5:
+        errors.append(f"в типе B ложных {n_false} из {n_b}, нужно половину ({n_b // 2}"
+                      + (f" или {n_b // 2 + 1})" if n_b % 2 else ")"))
     not_verified = [t["id"] for t in tasks if t.get("reference_status") != "verified"]
     if not_verified:
         errors.append(f"эталон не в статусе verified ({len(not_verified)}): " + ", ".join(not_verified))
