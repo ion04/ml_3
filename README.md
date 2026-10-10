@@ -7,25 +7,32 @@
 - Агентский флоу: [flow/README.md](flow/README.md)
 - Правила проекта: [CLAUDE.md](CLAUDE.md)
 
-## С нуля до отчёта (краткий путь)
+## С нуля до сдачи
 
-Подробности по каждой команде — в разделе «Как запустить эксперимент» ниже, что делает человек — в [HUMAN_TODO.md](HUMAN_TODO.md).
-Шаги 3–6 может выполнить агентский флоу: `python3 flow/flow.py run` (перезапускает отложенные шаги).
+Подробности по каждой команде — в разделе «Как запустить эксперимент» ниже. Что делает только человек (с оценкой времени) — в [HUMAN_TODO.md](HUMAN_TODO.md).
+Шаги 5–7 и 9 может выполнить агентский флоу: `python3 flow/flow.py run` перезапускает отложенные шаги, `python3 flow/flow.py status` показывает, где работа.
+Порядок важен: **гипотезы и прогноз коммитятся до любых оценочных прогонов** (это проверяют `src.checks g1` и сами прогонщики).
 
 | # | Что сделать | Команда | Готово, если |
 |---|-------------|---------|--------------|
-| 1 | Окружение и ключи | см. «Установка окружения»; `cp .env.example .env`, вписать ключи | `.venv/bin/python -m src.smoke_test` → код 0 |
-| 2 | G1: модели, банк задач, гипотезы с прогнозом (коммит до прогонов), решения по типу E | пункты G1 в HUMAN_TODO | `.venv/bin/python -m src.checks g1` → код 0 |
-| 3 | Отладка и заморозка промпта на dev-задачах | п. 4 ниже, `src.prompt_debug freeze` | в `config/experiment.json` заполнены `prompt_version`, `prompt_hash` |
-| 4 | Все прогоны (ПК `gpu` включён) | `scripts/run_experiments.sh` | «=== Готово ===», в `results/` таблицы и `run_manifest.json` |
-| 5 | G2: слепая проверка B/C/D двумя людьми, выборка парсера, тарифы | листы в `grading/` (п. 7) | `.venv/bin/python -m src.checks g2` → код 0 |
-| 6 | Анализ, кандидаты ошибок, каркас отчёта | `scripts/run_analysis.sh` | `results/summary_metrics.json` с `"demo": false`, `report/report.md` без «нет данных» |
-| 7 | G3: текст человека в отчёте, вопросы самоконтроля, доклад | блоки `<!-- ЧЕЛОВЕК:… -->` в `report/report.md` | `.venv/bin/python -m src.build_report check` → код 0 |
-| 8 | Проверка воспроизводимости в чистом окружении | `scripts/check_reproducibility.sh` | «Итог: совпадает», запись в `docs/reproducibility.md` |
-| 9 | Коммит | `git add -A && git commit` | `git status` чист, `.env` и `demo/` не в коммите |
+| 1 | Окружение | см. «Установка окружения» | `.venv/bin/python -m pytest -q` зелёный |
+| 2 | Ключи API | `cp .env.example .env`, вписать ключи (где взять — в комментариях файла) | `git status` не показывает `.env` |
+| 3 | Локальная модель на ПК `gpu` | `scripts/ensure_gpu_ollama.sh` (сам поднимет `scripts/gpu_ollama.sh`: Ollama на ПК + туннель `localhost:11435`); в `.env` `OLLAMA_BASE_URL=http://localhost:11435` | «Ollama отвечает», код 0 |
+| 4 | Smoke-тест 4 моделей | `.venv/bin/python -m src.smoke_test` | все строки `ok`, код 0 |
+| 5 | G1: гипотезы и прогноз (**коммит**), банк задач, решения по промпту и типу E | пункты G1 в HUMAN_TODO | `.venv/bin/python -m src.checks g1` → код 0 |
+| 6 | Отладка и заморозка промпта на 5 dev-задачах | п. 4 ниже, `src.prompt_debug freeze` | в `config/experiment.json` заполнены `prompt_version`, `prompt_hash` |
+| 7 | Все прогоны: основной, под гипотезы, код D, тип E, автопроверка, слепые листы, паспорт | `scripts/run_experiments.sh` | «=== Готово ===», в `results/` таблицы и `run_manifest.json`, в `grading/` листы |
+| 8 | G2: слепая проверка B/C/D двумя людьми, выборка парсера, тарифы | листы в `grading/` (п. 7), `grading/INSTRUCTIONS.md` | `.venv/bin/python -m src.checks g2` → код 0 |
+| 9 | Анализ, кандидаты ошибок, каркас отчёта | `scripts/run_analysis.sh` | `results/summary_metrics.json` с `"demo": false`, `report/report.md` без «нет данных» |
+| 10 | G3: выводы по гипотезам, 5 ошибок, ограничения, рекомендации | блоки `<!-- ЧЕЛОВЕК:… -->` в `report/report.md`, ячейки «Вывод» в `analysis.ipynb` | `.venv/bin/python -m src.build_report check` → код 0 |
+| 11 | Вопросы самоконтроля и доклад на 5 минут | `report/selfcheck_questions.md`, `report/slides_outline.md` | ответы под всеми 12 вопросами, доклад укладывается в 5 мин |
+| 12 | Проверка воспроизводимости в чистом окружении | `scripts/check_reproducibility.sh` | «Итог: совпадает», запись в `docs/reproducibility.md` |
+| 13 | Сдача | `git add -A && git commit`; если нужен docx/PDF — `brew install pandoc`, затем `pandoc report/report.md -o report.docx --resource-path=report` | `git status` чист, `.env` и `demo/` не в коммите, в сданном файле видны рисунки |
 
 Весь конвейер без ключей на mock-моделях (всё пишется в `demo/`, это не результаты):
 `scripts/run_experiments.sh --demo && scripts/run_analysis.sh --demo`.
+
+Для защиты: карта «требование задания → код» — [docs/requirements_traceability.md](docs/requirements_traceability.md); итоги аудита — [docs/qa_report.md](docs/qa_report.md); независимый пересчёт эталонов — `.venv/bin/python docs/audit/recompute_refs.py`.
 
 ## Установка окружения
 
@@ -50,12 +57,15 @@ cp .env.example .env   # затем вписать значения; комме�
 ```
 Файл `.env` не коммитится.
 
-Локальная модель:
+Локальная модель (`qwen3:8b`) для прогонов считается на ПК `gpu` (Windows 10, RTX 3090, доступ `ssh gpu`), а не на ноутбуке:
 ```bash
-brew install ollama
-brew services start ollama
-ollama pull qwen3:8b
+# на ПК: портативный Ollama 0.40.2 в C:\Users\616\ollama, модель скачана (ollama pull qwen3:8b)
+scripts/ensure_gpu_ollama.sh                       # проверка; если туннеля нет — сам запускает scripts/gpu_ollama.sh
+nohup scripts/gpu_ollama.sh >> flow/logs/gpu_ollama.log 2>&1 &   # то же вручную: Ollama на ПК + туннель localhost:11435
+curl -s localhost:11435/api/version                # должен ответить версией
+.venv/bin/python -m src.server_info --write --note "..."         # железо ПК → results/run_manifest.json (ollama_server)
 ```
+Если ПК недоступен, прогоны локальной модели откладываются (на ноутбуке допустимы только короткие проверки на 1–5 запросов). Ollama на ноутбуке (`brew install ollama && brew services start ollama && ollama pull qwen3:8b`) нужен только для таких проверок; запасной сервер — `scripts/setup_home_server.sh` (`src.server_info --host home`).
 
 Модули запускаются из корня проекта так: `.venv/bin/python -m src.<module>`. Тесты запускаются командой `.venv/bin/python -m pytest`.
 
@@ -71,8 +81,8 @@ ollama pull qwen3:8b
 | `grading/` | листы слепой ручной проверки и ключи деанонимизации |
 | `report/`, `report/figures/` | отчёт и рисунки |
 | `tests/` | тесты pytest (на mock-провайдере, без ключей) |
-| `docs/` | вспомогательные материалы (например, справка по гипотезам) |
-| `scripts/` | shell-скрипты запуска прогонов |
+| `docs/` | справка по гипотезам, журнал отладки промпта, воспроизводимость, трассировка требований, отчёт аудита (`docs/audit/` — независимый пересчёт эталонов) |
+| `scripts/` | shell-скрипты: прогоны, анализ, воспроизводимость, туннель к ПК `gpu` |
 | `demo/` | результаты на mock и синтетике. **Не коммитится** и не является результатами эксперимента |
 | `flow/` | агентский флоу: задания шагов, handoff, оркестратор |
 
