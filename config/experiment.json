@@ -10,8 +10,8 @@
   ],
   "seed": 42,
   "bootstrap_n": 1000,
-  "prompt_version": null,
-  "prompt_hash": null,
+  "prompt_version": "v1",
+  "prompt_hash": "d946bcbce2dd",
   "extra_runs": {
     "_comment": "Дополнительные прогоны src.run_extra (шаг 05). types: какие типы задач брать (null = все, где есть нужный текст). cot.extra_models: модели, которые в режиме cot идут с обычным промптом base, потому что рассуждают сами (например qwen3-8b-think для H6); прогоняются, даже если enabled=false. vote_rule описывает правило большинства для H7 (см. src/run_extra.py::vote).",
     "cot": {

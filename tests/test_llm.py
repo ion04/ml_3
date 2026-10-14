@@ -275,6 +275,25 @@ def test_openai_compat_parsing(tmp_path, monkeypatch):
     assert sent["client"]["project"] == "b1gfolder"
     assert sent["request"]["extra_body"] == {"thinking": {"type": "disabled"}}
     assert "test-key-123456" not in log.read_text(encoding="utf-8")
+    assert json.loads(log.read_text(encoding="utf-8"))["tokens_cached"] is None  # кэш провайдер не сообщил
+
+
+def test_cached_tokens_logged():
+    """tokens_cached: DeepSeek (prompt_cache_hit_tokens), стандарт OpenAI (cached_tokens), нет данных → None."""
+    from gigachat.models import Usage
+    from openai.types import CompletionUsage
+
+    ds = CompletionUsage.model_validate({"prompt_tokens": 100, "completion_tokens": 5, "total_tokens": 105,
+                                         "prompt_cache_hit_tokens": 64, "prompt_cache_miss_tokens": 36})
+    assert llm._openai_cached_tokens(ds) == 64
+    oa = CompletionUsage.model_validate({"prompt_tokens": 100, "completion_tokens": 5, "total_tokens": 105,
+                                         "prompt_tokens_details": {"cached_tokens": 32}})
+    assert llm._openai_cached_tokens(oa) == 32
+    assert llm._openai_cached_tokens(SimpleNamespace(prompt_tokens=1, completion_tokens=1)) is None
+    assert llm._openai_cached_tokens(None) is None
+    # GigaChat: поле SDK precached_prompt_tokens (в prompt_tokens не входит)
+    assert Usage(prompt_tokens=81, completion_tokens=21, total_tokens=1386,
+                 precached_prompt_tokens=1284).precached_prompt_tokens == 1284
 
 
 def test_ollama_parsing_and_memory(tmp_path, monkeypatch):

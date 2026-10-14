@@ -300,7 +300,11 @@ def ollama_ps(base_url: str, model_id: str) -> dict | None:
 
 # ---------- Провайдеры ----------
 # Каждая функция возвращает dict: text, tokens_in, tokens_out, model_reported,
-# finish_reason, reasoning_text, latency_s (время самого запроса).
+# finish_reason, reasoning_text, latency_s (время самого запроса) и, если провайдер сообщает, tokens_cached.
+# tokens_cached — токены входа, взятые из кэша провайдера. Смысл у провайдеров разный:
+#   GigaChat (precached_prompt_tokens): НЕ входят в prompt_tokens и не тарифицируются,
+#     полный размер входа = tokens_in + tokens_cached;
+#   DeepSeek (prompt_cache_hit_tokens): уже входят в prompt_tokens, тарифицируются по цене cache hit.
 
 def _call_openai_compat(cfg, model_id, messages, temperature, max_tokens, repeat):
     from openai import OpenAI
@@ -322,12 +326,25 @@ def _call_openai_compat(cfg, model_id, messages, temperature, max_tokens, repeat
         "text": choice.message.content,
         "tokens_in": resp.usage.prompt_tokens if resp.usage else None,
         "tokens_out": resp.usage.completion_tokens if resp.usage else None,
+        "tokens_cached": _openai_cached_tokens(resp.usage),
         "model_reported": resp.model,
         "finish_reason": choice.finish_reason,
         # DeepSeek в режиме рассуждений отдаёт их отдельным полем
         "reasoning_text": getattr(choice.message, "reasoning_content", None),
         "latency_s": latency,
     }
+
+
+def _openai_cached_tokens(usage) -> int | None:
+    """Токены входа из кэша: DeepSeek — prompt_cache_hit_tokens, стандарт OpenAI — prompt_tokens_details.cached_tokens."""
+    if usage is None:
+        return None
+    hit = getattr(usage, "prompt_cache_hit_tokens", None)
+    if hit is None and isinstance(getattr(usage, "model_extra", None), dict):
+        hit = usage.model_extra.get("prompt_cache_hit_tokens")
+    if hit is None and getattr(usage, "prompt_tokens_details", None) is not None:
+        hit = getattr(usage.prompt_tokens_details, "cached_tokens", None)
+    return hit
 
 
 _gigachat_clients: dict = {}  # клиент на модель: OAuth-токен живёт 30 мин и переиспользуется
@@ -356,6 +373,7 @@ def _call_gigachat(cfg, model_id, messages, temperature, max_tokens, repeat):
         "text": choice.message.content,
         "tokens_in": resp.usage.prompt_tokens,
         "tokens_out": resp.usage.completion_tokens,
+        "tokens_cached": resp.usage.precached_prompt_tokens,
         "model_reported": resp.model,
         "finish_reason": choice.finish_reason,
         "reasoning_text": choice.message.reasoning_content,
@@ -541,6 +559,7 @@ def ask(model_key, prompt, temperature=0.0, *, system=None, history=None, max_to
             "finish_reason": out.get("finish_reason"),
             "tokens_in": out.get("tokens_in"),
             "tokens_out": out.get("tokens_out"),
+            "tokens_cached": out.get("tokens_cached"),   # см. комментарий перед _call_openai_compat
             "latency_s": round(out.get("latency_s", elapsed), 3),
             "error": error,
             "attempt": attempt,

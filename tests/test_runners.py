@@ -118,6 +118,7 @@ def test_eval_run_refused_without_gate(env, capsys):
 def test_eval_problems_require_prompt_hash(env):
     cfg = json.loads(run_bank.EXPERIMENT_PATH.read_text(encoding="utf-8"))
     cfg["prompt_version"] = run_bank.prompts.PROMPT_VERSION      # версия есть, отпечатка нет
+    cfg["prompt_hash"] = None
     run_bank.EXPERIMENT_PATH.write_text(json.dumps(cfg), encoding="utf-8")
     problems = run_bank.eval_problems("main", FIXTURE_BANK)
     assert any("prompt_hash" in p for p in problems)
