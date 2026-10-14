@@ -1,6 +1,10 @@
 {
   "_comment": "Настройки эксперимента ЛР3. hypotheses заполняет человек (3 гипотезы из разных групп, см. docs/hypotheses_guide.md) и коммитит вместе с hypotheses.md ДО оценочных прогонов. Своя гипотеза: добавить её группу в custom_hypothesis_groups, например {\"H14\": 3}.",
-  "hypotheses": [],
+  "hypotheses": [
+    "H1",
+    "H6",
+    "H9"
+  ],
   "custom_hypothesis_groups": {},
   "temperature_main": 0,
   "sc_repeats": 5,
@@ -19,7 +23,9 @@
         "A",
         "B"
       ],
-      "extra_models": []
+      "extra_models": [
+        "qwen3-8b-think"
+      ]
     },
     "selfconsistency": {
       "types": [
