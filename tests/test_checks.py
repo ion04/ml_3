@@ -1,5 +1,6 @@
 """Тесты src/checks.py (гейт G1). Сеть не нужна: smoke-тест не запускается."""
 
+import re
 import json
 import subprocess
 from datetime import datetime, timezone
@@ -60,8 +61,9 @@ def test_hypotheses_md_filled_passes():
 
 
 def test_template_md_fails():
-    template = (checks.ROOT / "hypotheses.md").read_text(encoding="utf-8")
-    problems = checks.check_hypotheses_md(template, [])
+    # Шаблон строим из FILLED_MD, а не читаем hypotheses.md проекта: он уже заполнен и закоммичен.
+    template = re.sub(r"(?m)^(- (?:Прогноз|Обоснование прогноза): ).*$", r"\1TODO(человек)", FILLED_MD)
+    problems = checks.check_hypotheses_md(template, ["H1", "H6", "H9"])
     assert any("не заполнено" in p for p in problems)
     assert any("Прогноз" in p for p in problems)
 

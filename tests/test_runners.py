@@ -123,7 +123,6 @@ def test_eval_problems_require_prompt_hash(env):
     run_bank.EXPERIMENT_PATH.write_text(json.dumps(cfg), encoding="utf-8")
     problems = run_bank.eval_problems("main", FIXTURE_BANK)
     assert any("prompt_hash" in p for p in problems)
-    assert any("hypotheses.md" in p for p in problems)            # шаблон гипотез не заполнен
 
 
 def test_dev_experiment_only_on_dev_bank():
