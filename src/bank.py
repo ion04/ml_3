@@ -9,6 +9,7 @@
   .venv/bin/python -m src.bank stats              # таблица «тип × тема»
   .venv/bin/python -m src.bank refs [--write]     # прогнать data/refs/<id>.py и data/d_reference/<id>.py,
                                                   # сверить с эталонами; --write записывает reference_metric для D
+  .venv/bin/python -m src.bank verify A1 F3 ...    # человек проверил эталоны черновиков агента → статус verified
 
 Поля задачи (все обязательны, null допустим там, где сказано):
   id               уникальный идентификатор (A1, B3, ...; у dev-задач префикс dev-)
@@ -458,6 +459,9 @@ def main(argv=None) -> int:
     p_stats.add_argument("--bank", default=str(BANK_PATH))
     p_refs = sub.add_parser("refs", help="сверить эталоны со скриптами data/refs и data/d_reference")
     p_refs.add_argument("--write", action="store_true", help="записать reference_metric для D")
+    p_ver = sub.add_parser("verify", help="отметить эталоны черновиков агента как проверенные человеком")
+    p_ver.add_argument("ids", nargs="+", help="id задач, например A1 A2 F3")
+    p_ver.add_argument("--bank", default=str(BANK_PATH))
     args = parser.parse_args(argv)
 
     if args.cmd == "validate":
@@ -484,6 +488,21 @@ def main(argv=None) -> int:
             problems += check_refs(path, write=args.write)
         print(f"\nРасхождений: {problems}")
         return 1 if problems else 0
+
+    if args.cmd == "verify":
+        # Запускает человек, решив задачу сам: статус verified означает «эталон подтверждён человеком».
+        tasks = load_tasks(args.bank)
+        by_id = {t["id"]: t for t in tasks}
+        unknown = [i for i in args.ids if i not in by_id]
+        not_draft = [i for i in args.ids if i in by_id and by_id[i]["reference_status"] != "agent_draft"]
+        if unknown or not_draft:
+            print("Не отмечено. Нет таких задач:", unknown or "—", "| не черновик агента:", not_draft or "—")
+            return 1
+        for i in args.ids:
+            by_id[i]["reference_status"] = "verified"
+        save_tasks(tasks, args.bank)
+        print("verified:", ", ".join(args.ids))
+        return 0
     return 2
 
 

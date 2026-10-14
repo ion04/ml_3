@@ -247,3 +247,16 @@ def test_h2_needs_formula_and_verbal():
         t["formula_ru"] = "P(D) = 0,01"
     assert errors_of(tasks, final=True, hypotheses=["H2"]) == []
     assert any("H2 + en" in e for e in errors_of(tasks, final=True, hypotheses=["H2"], languages=["ru", "en"]))
+
+
+def test_verify_marks_only_agent_drafts(tmp_path):
+    path = tmp_path / "tasks.jsonl"
+    tasks = bank.load_tasks()
+    bank.save_tasks(tasks, path)
+    todo_id = next(t["id"] for t in tasks if t["reference_status"] == "todo")
+    draft_id = next(t["id"] for t in tasks if t["reference_status"] == "agent_draft")
+
+    assert bank.main(["verify", "--bank", str(path), todo_id]) == 1       # заготовку нельзя «подтвердить»
+    assert bank.main(["verify", "--bank", str(path), draft_id]) == 0
+    status = {t["id"]: t["reference_status"] for t in bank.load_tasks(path)}
+    assert status[draft_id] == "verified" and status[todo_id] == "todo"
