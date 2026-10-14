@@ -30,6 +30,7 @@ def env(tmp_path, monkeypatch):
 
     cfg = json.loads((llm.ROOT / "config" / "experiment.json").read_text(encoding="utf-8"))
     cfg["hypotheses"] = ["H1", "H6", "H9"]
+    cfg["extra_runs"]["cot"]["extra_models"] = []   # тест не должен зависеть от выбора моделей для H6 в config
     cfg_path = tmp_path / "experiment.json"
     cfg_path.write_text(json.dumps(cfg, ensure_ascii=False), encoding="utf-8")
 
