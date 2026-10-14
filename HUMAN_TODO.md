@@ -50,6 +50,7 @@
 - [ ] **Закоммитить гипотезы и прогноз**: `git add hypotheses.md config/experiment.json && git commit -m "Гипотезы и прогноз до эксперимента"`. После коммита `hypotheses.md` не менять — *проверка: `.venv/bin/python -m src.checks hypcommit` печатает хэш без пометки «есть незакоммиченные изменения».*
 
 ### G1.5. Банк задач (`data/tasks.jsonl`; таблица `.venv/bin/python -m src.bank stats`)
+- [ ] (14.10) **Рабочий лист для 20 своих задач — `docs/bank_worksheet.md`.** Как устроены F1–F10: изменённые версии A1–A8, основа F9/F10 — ISLR. Калькуляторы эталонов в `data/refs/templates/` (впишите свои числа, они проверят, что ответ отличается от оригинала). B, C, D — полностью свои — *проверка: `src.bank validate --final` и `src.bank refs` без ошибок.*
 - [ ] (шаг 03) **Придумать 20 своих задач** (не меньше половины банка) — заготовки с `TODO(человек)` в `data/tasks.jsonl`, в `text_ru` каждой написано, что придумать:
   - B5–B8 — утверждения «верно/неверно» (clustering, linreg, logreg — верные; metrics — ложное; в B должно быть 4 ложных из 8) + `rubric`;
   - C4–C6 — выбор метода (bayes, svm, pca) + `rubric` **до прогонов**;
