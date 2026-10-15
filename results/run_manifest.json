@@ -1,8 +1,8 @@
 {
   "_comment": "Собрано src.manifest по журналу и таблицам; руками не править.",
   "demo": false,
-  "generated_utc": "2026-10-15T03:58:10+00:00",
-  "git_head": "25dd11864a32959d87f4a1361eab9ed660a04ef2",
+  "generated_utc": "2026-10-15T10:02:20+00:00",
+  "git_head": "2f05073d610179d37eac3e9b6347a52be3dcce40",
   "log": "logs/calls.jsonl",
   "hypotheses": {
     "ids": [
@@ -53,12 +53,12 @@
   "calls_by_experiment": {
     "cot": {
       "first_utc": "2026-10-15T00:43:04.928+00:00",
-      "last_utc": "2026-10-15T03:02:05.744+00:00",
-      "records": 101,
-      "ok": 70,
+      "last_utc": "2026-10-15T09:52:10.102+00:00",
+      "records": 111,
+      "ok": 80,
       "errors": 31,
-      "retried_requests": 0,
-      "unresolved_requests": 3
+      "retried_requests": 3,
+      "unresolved_requests": 0
     },
     "dev": {
       "first_utc": "2026-10-09T22:22:38.530+00:00",
@@ -71,9 +71,9 @@
     },
     "followup_doubt": {
       "first_utc": "2026-10-15T01:22:28.418+00:00",
-      "last_utc": "2026-10-15T01:24:11.706+00:00",
-      "records": 62,
-      "ok": 62,
+      "last_utc": "2026-10-15T09:52:56.023+00:00",
+      "records": 88,
+      "ok": 88,
       "errors": 0,
       "retried_requests": 0,
       "unresolved_requests": 0
@@ -89,9 +89,9 @@
     },
     "smoke": {
       "first_utc": "2026-10-09T17:52:54.153+00:00",
-      "last_utc": "2026-10-15T03:51:37.978+00:00",
-      "records": 57,
-      "ok": 47,
+      "last_utc": "2026-10-15T09:51:03.815+00:00",
+      "records": 61,
+      "ok": 51,
       "errors": 10,
       "retried_requests": 3,
       "unresolved_requests": 0
@@ -133,17 +133,18 @@
       ],
       "experiments": [
         "cot",
+        "followup_doubt",
         "main"
       ],
       "first_utc": "2026-10-15T00:39:12.717+00:00",
-      "last_utc": "2026-10-15T03:02:05.744+00:00",
-      "records": 75,
-      "ok": 44,
+      "last_utc": "2026-10-15T09:52:56.023+00:00",
+      "records": 111,
+      "ok": 80,
       "errors": 31,
-      "retried_requests": 0,
-      "unresolved_requests": 3,
-      "tokens_in": 13592,
-      "tokens_out": 16271,
+      "retried_requests": 3,
+      "unresolved_requests": 0,
+      "tokens_in": 33055,
+      "tokens_out": 31337,
       "finish_reason_length": 0
     },
     "gigachat-2-max": {
@@ -306,9 +307,9 @@
   },
   "results": {
     "cot_ru.jsonl": {
-      "rows": 71,
-      "errors": 1,
-      "parse_ok": 70,
+      "rows": 80,
+      "errors": 0,
+      "parse_ok": 80,
       "models": [
         "deepseek-v4-pro",
         "gigachat-2-max",
@@ -377,10 +378,11 @@
       ]
     },
     "followup_doubt_ru.jsonl": {
-      "rows": 62,
+      "rows": 88,
       "errors": 0,
-      "parse_ok": 62,
+      "parse_ok": 88,
       "models": [
+        "deepseek-v4-pro",
         "gigachat-2-max",
         "qwen3-8b",
         "yandexgpt-pro-5.1"
@@ -388,6 +390,9 @@
       "prompt_version": [
         "v1"
       ]
+    },
+    "graded_auto.jsonl": {
+      "rows": 2060
     },
     "main_ru.jsonl": {
       "rows": 152,
