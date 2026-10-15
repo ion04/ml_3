@@ -63,6 +63,9 @@ TYPE_NAMES = {"A": "расчётные", "B": "«верно / неверно» �
               "D": "код scikit-learn", "E": "LLM как классификатор (AI4I 2020)",
               "F": "ловушки: изменённые условия, недостающие и лишние данные"}
 ERRORS_N = 5
+# Идентификатор каталога Yandex Cloud в URI модели (gpt://<каталог>/yandexgpt-5.1): в отчёт не выносим.
+YANDEX_FOLDER_RE = re.compile(r"gpt://[a-z0-9]+/")
+COVERAGE_NAMES = {"typeE": "тип E", "cot": "H6, cot", "followup_doubt": "H9, followup_doubt"}
 
 
 def report_paths(demo: bool) -> dict:
@@ -387,12 +390,39 @@ def model_type_pivot(rows: list[dict]) -> str:
                     ["model_key", *types])
 
 
+def sorted_by_role(rows: list[dict], key: str) -> list[dict]:
+    """Строки в порядке ролей моделей (ru1, ru2, big, local), как в остальных таблицах."""
+    order = an.order_models([r[key] for r in rows], llm.load_models())
+    return sorted(rows, key=lambda r: order.index(r[key]))
+
+
+def coverage_table(coverage: dict) -> str:
+    """Одна таблица на все прогоны: строки — модели, столбцы — прогоны, ячейка «получено / ожидалось»."""
+    if not coverage:
+        return NO_DATA
+    cells, models = {}, []
+    for run, rows in coverage.items():
+        for r in rows:
+            models.append(r["model_key"])
+            mark = "" if r.get("complete") else " **неполный**"
+            cells[(r["model_key"], run)] = f"{r.get('n_got')} / {r.get('n_expected')}{mark}"
+    runs = list(coverage)
+    rows = [{"model_key": m, **{run: cells.get((m, run), "—") for run in runs}} for m in dict.fromkeys(models)]
+    return md_table(rows, [("model_key", "модель")] + [(run, COVERAGE_NAMES.get(run, run)) for run in runs])
+
+
+def incomplete_runs(coverage: dict) -> dict:
+    """{прогон: [модели с неполным прогоном]} — для справки к ограничениям."""
+    out = {run: [r["model_key"] for r in rows if not r.get("complete")] for run, rows in (coverage or {}).items()}
+    return {run: models for run, models in out.items() if models}
+
+
 def hypothesis_block(h: Human, hid: str, data: dict | None, prediction: dict | None, figures_dir: Path,
                      selected: bool) -> str:
     parts = [f"#### {hid}. {HYP_TITLES.get(hid, '')}" + ("" if selected else " (не выбрана, разведочный анализ)")]
     if prediction:
         parts.append(f"Прогноз из коммита: **{prediction.get('Прогноз', '—')}**. Критерий: "
-                     f"{prediction.get('Критерий решения (тест, порог)', '—')}.")
+                     f"{prediction.get('Критерий решения (тест, порог)', '—').rstrip('.')}.")
     if not data:
         parts.append(NO_DATA)
     else:
@@ -426,7 +456,9 @@ def section_results(h: Human, summary: dict | None, cfg: dict, figures_dir: Path
         parts.append("_Нет данных: `results/summary_metrics.json` ещё не создан. Он появится после прогонов "
                      "(шаги 08–09), ручной проверки (G2) и `scripts/run_analysis.sh` (шаг 11)._")
     counts = s.get("counts") or {}
-    parts += ["### 3.1. Объём данных", kv_list(counts)]
+    parts += ["### 3.1. Объём данных", kv_list(counts),
+              "**Полнота прогонов** (ответов получено / ожидалось; `summary_metrics.json` → `coverage`)",
+              coverage_table(s.get("coverage") or {})]
 
     parts += ["### 3.2. Точность по моделям (основной прогон, RU; A, B, C, D, F)",
               md_table(acc_rows(s.get("accuracy_by_model") or [], "model_key"), [("model_key", "модель"), *ACC_COLS]),
@@ -445,7 +477,17 @@ def section_results(h: Human, summary: dict | None, cfg: dict, figures_dir: Path
                         ("acc_first", "точность 1"), ("acc_second", "точность 2"), ("p_value", "p"),
                         ("p_holm", "p (Холм)")]),
               "### 3.5. Тип D: код scikit-learn",
-              md_table(s.get("typeD") or []),
+              md_table([{**r, "pass_ci": ci(r, "pass_at_1", "pass_at_1_ci_low", "pass_at_1_ci_high"),
+                         "correct_ci": ci(r, "correct", "correct_ci_low", "correct_ci_high"),
+                         "method_ci": ci(r, "method_error_any", "method_error_any_ci_low", "method_error_any_ci_high")}
+                        for r in s.get("typeD") or []],
+                       [("model_key", "модель"), ("n_programs", "программ"), ("pass_ci", "pass@1 [95% CI]"),
+                        ("n_pass_unknown", "pass неизвестен"), ("correct_ci", "метрика верна [95% CI]"),
+                        ("n_correct_graded", "оценено (метрика)"), ("method_ci", "есть методологическая ошибка [95% CI]"),
+                        ("n_method_graded", "оценено (чек-лист)")]),
+              "**Чек-лист методологических ошибок** (доля программ с ошибкой, среднее двух проверяющих)",
+              md_table(s.get("typeD") or [], ["model_key", *[k for k in (s.get("typeD") or [{}])[0]
+                                                              if re.match(r"d\d_", k)]]),
               figure("typeD_checklist", figures_dir, "тип D: методологические ошибки по чек-листу"),
               "### 3.6. Тип E: LLM как классификатор",
               md_table(s.get("typeE") or [],
@@ -456,9 +498,11 @@ def section_results(h: Human, summary: dict | None, cfg: dict, figures_dir: Path
               figure("typeE_shots", figures_dir, "тип E: F1 «отказа» и balanced accuracy от числа примеров"),
               "### 3.7. Цена и скорость",
               md_table(s.get("cost") or [],
-                       ["model_key", "n", "accuracy", "latency_s_mean", "tokens_in_mean", "tokens_out_mean",
-                        "cost_rub_total", "rub_per_correct", "rub_per_correct_ci_low", "rub_per_correct_ci_high"]),
-              "**Тип E: токены и стоимость**", md_table(s.get("cost_typeE") or []),
+                       ["model_key", "n", "accuracy", "latency_s_mean", "tokens_in_mean", "tokens_in_full_mean",
+                        "tokens_out_mean", "cost_rub_total", "rub_per_correct", "rub_per_correct_ci_low", "rub_per_correct_ci_high"]),
+              "`tokens_in_mean` — тарифицируемый вход (по нему считаются ₽); `tokens_in_full_mean` — полный вход: "
+              "у GigaChat к нему добавлены токены из кэша префикса, которые не тарифицируются.",
+              "**Тип E: токены и стоимость**", md_table(sorted_by_role(s.get("cost_typeE") or [], "model")),
               figure("cost_accuracy", figures_dir, "«стоимость – точность» для каждой модели")]
 
     # Гипотезы: сначала три выбранные (с вердиктом человека), затем остальные, по которым есть числа.
@@ -507,6 +551,10 @@ def limitation_facts(cfg: dict, manifest: dict | None, summary: dict | None, pri
                   if v.get("unresolved_requests")}
     if unresolved:
         facts.append(f"запросы без ответа после повторов: {unresolved}")
+    incomplete = incomplete_runs(s.get("coverage"))
+    if incomplete:
+        facts.append("неполные прогоны (раздел 3.1): " + "; ".join(
+            f"{COVERAGE_NAMES.get(run, run)} — {', '.join(m)}" for run, m in incomplete.items()))
     if s.get("kappa_below_min"):
         facts.append(f"κ ниже {an.KAPPA_MIN} у типов: {s['kappa_below_min']}")
     return facts
@@ -565,7 +613,8 @@ def build(demo: bool, old_text: str = "") -> tuple[str, list[tuple[str, bool]]]:
     orphans = h.orphans()
     if orphans:
         sections.append(orphans)
-    return "\n\n".join(sections) + "\n", h.used
+    text = YANDEX_FOLDER_RE.sub("gpt://<YANDEX_FOLDER_ID>/", "\n\n".join(sections) + "\n")
+    return text, h.used
 
 
 def main(argv=None) -> int:

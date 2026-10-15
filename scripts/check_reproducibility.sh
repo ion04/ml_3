@@ -21,7 +21,7 @@ TMP=$(mktemp -d "${TMPDIR:-/tmp}/lab3_repro.XXXXXX")
 echo "== Временная папка: $TMP"
 
 # 1. Копия проекта без окружения, ключей и служебных файлов флоу.
-rsync -a --exclude '.venv/' --exclude '.env' --exclude '__pycache__/' --exclude 'flow/state/' --exclude 'flow/logs/' \
+rsync -a --exclude '.venv' --exclude '.env' --exclude '__pycache__/' --exclude 'flow/state/' --exclude 'flow/logs/' \
   ./ "$TMP/proj/"
 # Исходный JSON убираем из копии: ноутбук должен создать его заново.
 mv "$TMP/proj/$SUMMARY" "$TMP/summary_original.json"

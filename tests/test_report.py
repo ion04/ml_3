@@ -221,3 +221,26 @@ def test_bank_and_runs_come_from_summary(paths):
     assert "запросы без ответа после повторов: {'main': 1}" in text
     write_json(paths["summary"], {"demo": False})
     assert "Задач в банке" not in br.build(demo=False)[0]
+
+
+def test_coverage_table_and_incomplete_runs():
+    cov = {"typeE": [{"model_key": "m1", "n_expected": 600, "n_got": 600, "complete": True},
+                     {"model_key": "m2", "n_expected": 600, "n_got": 0, "complete": False}],
+           "cot": [{"model_key": "m3", "n_expected": 16, "n_got": 16, "complete": True}]}
+    lines = br.coverage_table(cov).splitlines()
+    assert lines[0] == "| модель | тип E | H6, cot |"
+    assert lines[3] == "| m2 | 0 / 600 **неполный** | — |" and lines[4] == "| m3 | — | 16 / 16 |"
+    assert br.incomplete_runs(cov) == {"typeE": ["m2"]}
+    assert br.coverage_table({}) == br.NO_DATA and br.incomplete_runs(None) == {}
+
+
+def test_yandex_folder_masked_and_criterion_period(paths):
+    write_json(paths["manifest"], {"prompt": {"version_config": "v1", "hash_config": "x", "version_code": "v1",
+                                              "hash_code": "x"}})
+    write_json(paths["summary"], {"demo": False, "runs": {"models": {"yandexgpt-pro-5.1": {
+        "model_requested": "gpt://b1gabc123/yandexgpt-5.1", "model_reported": "gpt://b1gabc123/yandexgpt-5.1"}}}})
+    text, _ = br.build(demo=False)
+    assert "b1gabc123" not in text and "gpt://<YANDEX_FOLDER_ID>/yandexgpt-5.1" in text
+    block = br.hypothesis_block(br.Human(""), "H1", None, {"Прогноз": "x", "Критерий решения (тест, порог)": "y."},
+                                paths["figures"], False)
+    assert "Критерий: y." in block and "y.." not in block
