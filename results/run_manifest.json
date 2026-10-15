@@ -1,8 +1,8 @@
 {
   "_comment": "Собрано src.manifest по журналу и таблицам; руками не править.",
   "demo": false,
-  "generated_utc": "2026-10-15T03:51:54+00:00",
-  "git_head": "52933d1d334df7c1563119c18c9b510dbb3d84ae",
+  "generated_utc": "2026-10-15T03:58:10+00:00",
+  "git_head": "25dd11864a32959d87f4a1361eab9ed660a04ef2",
   "log": "logs/calls.jsonl",
   "hypotheses": {
     "ids": [
@@ -89,10 +89,10 @@
     },
     "smoke": {
       "first_utc": "2026-10-09T17:52:54.153+00:00",
-      "last_utc": "2026-10-15T03:23:23.247+00:00",
-      "records": 56,
+      "last_utc": "2026-10-15T03:51:37.978+00:00",
+      "records": 57,
       "ok": 47,
-      "errors": 9,
+      "errors": 10,
       "retried_requests": 3,
       "unresolved_requests": 0
     },
