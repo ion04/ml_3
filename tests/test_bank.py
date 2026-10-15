@@ -204,9 +204,14 @@ def test_stats_tables():
     assert tables["тип × тема"].loc["всего", "всего"] == 30
 
 
-def test_cli_validate_exit_codes(capsys):
+def test_cli_validate_exit_codes(capsys, tmp_path):
     assert bank.main(["validate"]) == 0
-    assert bank.main(["validate", "--final"]) == 1   # в черновике есть заготовки todo
+    # Реальный банк уже финальный, поэтому для кода 1 берём его копию с непроверенным эталоном.
+    tasks = bank.load_tasks(bank.BANK_PATH)
+    tasks[0]["reference_status"] = "agent_draft"
+    draft = tmp_path / "tasks.jsonl"
+    bank.save_tasks(tasks, draft)
+    assert bank.main(["validate", "--final", "--bank", str(draft)]) == 1
     assert "ОШИБКА" in capsys.readouterr().out
 
 

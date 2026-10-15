@@ -318,8 +318,9 @@ def _call_openai_compat(cfg, model_id, messages, temperature, max_tokens, repeat
     if max_tokens is not None:
         extra["max_tokens"] = max_tokens
     t0 = time.perf_counter()
-    resp = client.chat.completions.create(model=model_id, messages=messages,
-                                          temperature=temperature, **extra)
+    resp = _with_deadline(lambda: client.chat.completions.create(model=model_id, messages=messages,
+                                                                 temperature=temperature, **extra),
+                          cfg.get("timeout_s", DEFAULT_TIMEOUT_S), on_timeout=client.close)
     latency = time.perf_counter() - t0
     choice = resp.choices[0]
     return {
@@ -333,6 +334,34 @@ def _call_openai_compat(cfg, model_id, messages, temperature, max_tokens, repeat
         "reasoning_text": getattr(choice.message, "reasoning_content", None),
         "latency_s": latency,
     }
+
+
+def _with_deadline(fn, seconds: float, on_timeout=None):
+    """Вызывает fn() и ждёт результата не дольше seconds, иначе TimeoutError (её ask() повторяет).
+
+    Таймаут httpx считается на каждое чтение, а не на весь ответ. DeepSeek, пока запрос стоит
+    в очереди, шлёт пустые строки keep-alive, поэтому запрос с timeout 300 с висел 14 минут (шаг 08).
+    on_timeout (например, client.close) закрывает соединение, чтобы зависший запрос не занимал
+    слот у провайдера. Поток с запросом — daemon и не мешает завершению программы.
+    """
+    box = {}
+
+    def target():
+        try:
+            box["result"] = fn()
+        except BaseException as exc:  # ошибку передаём в вызывающий поток как есть
+            box["error"] = exc
+
+    th = threading.Thread(target=target, daemon=True)
+    th.start()
+    th.join(seconds)
+    if th.is_alive():
+        if on_timeout is not None:
+            on_timeout()
+        raise TimeoutError(f"нет полного ответа за {seconds} с")
+    if "error" in box:
+        raise box["error"]
+    return box["result"]
 
 
 def _openai_cached_tokens(usage) -> int | None:

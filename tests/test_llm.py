@@ -256,6 +256,7 @@ def test_openai_compat_parsing(tmp_path, monkeypatch):
         def __init__(self, **kwargs):
             sent["client"] = kwargs
             self.chat = SimpleNamespace(completions=SimpleNamespace(create=self.create))
+            self.close = lambda: None
 
         def create(self, **kwargs):
             sent["request"] = kwargs
@@ -276,6 +277,22 @@ def test_openai_compat_parsing(tmp_path, monkeypatch):
     assert sent["request"]["extra_body"] == {"thinking": {"type": "disabled"}}
     assert "test-key-123456" not in log.read_text(encoding="utf-8")
     assert json.loads(log.read_text(encoding="utf-8"))["tokens_cached"] is None  # кэш провайдер не сообщил
+
+
+def test_with_deadline():
+    """Общий срок ответа: зависший вызов → TimeoutError (повторяемая), ошибки и результат проходят как есть."""
+    import threading
+
+    assert llm._with_deadline(lambda: 42, 1) == 42
+    with pytest.raises(ValueError):
+        llm._with_deadline(lambda: int("x"), 1)
+    hang = threading.Event()
+    closed = []
+    with pytest.raises(TimeoutError) as e:
+        llm._with_deadline(lambda: hang.wait(5), 0.1, on_timeout=lambda: closed.append(1))
+    hang.set()
+    assert closed == [1]  # соединение закрывается при таймауте
+    assert llm.is_retryable(e.value)
 
 
 def test_cached_tokens_logged():

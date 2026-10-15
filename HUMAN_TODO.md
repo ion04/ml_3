@@ -81,6 +81,7 @@
 
 ### G1.8. Прогоны (после G1.1–G1.7)
 - [ ] (шаг 07, 08, 09, 10) **Запустить флоу** — `python3 flow/flow.py run` (ПК `gpu` включён). Флоу отладит и заморозит промпт на 5 dev-задачах на всех моделях (шаг 07), сделает основной и доп. прогоны (08), тип E: пробный на 20 строках → полный (09), автопроверку и слепые листы (10). Вручную — `scripts/run_experiments.sh` (команды в README). Если сеть/429/5xx не прошли и после 3 автоповторов — запустить ещё раз позже: дозапрашиваются только вызовы без ответа — *проверка: `config/experiment.json` содержит `prompt_version`/`prompt_hash`; `.venv/bin/python -m src.manifest` показывает «без ответа 0»; в `results/typeE_metrics.csv` 12 строк `source=llm` с `complete=True`; в `grading/` есть `sheet_r1.csv`, `sheet_r2.csv`, `key_DO_NOT_OPEN.csv`, `parser_spotcheck.csv`.*
+- [ ] (шаг 08) **Дозапросить DeepSeek для H6 и H9, если шаг 08 остался `deferred`** — 15.10 с 00:43 UTC API DeepSeek перестал отвечать (даже smoke «2+2» не получил ответа за 300 с; GigaChat, Yandex, Qwen работали). Основной прогон, cot и followup остальных моделей и код D получены. Когда DeepSeek снова отвечает (`.venv/bin/python -m src.smoke_test` → строка deepseek `ok`): `python3 flow/flow.py run` или вручную `.venv/bin/python -m src.run_extra selected --models deepseek-v4-pro`, затем `.venv/bin/python -m src.manifest` и коммит logs/ и results/ — *проверка: `src.manifest` печатает «без ответа 0» для cot; в `results/cot_ru.jsonl` 80 строк, в `followup_doubt_ru.jsonl` есть строки deepseek-v4-pro.*
 
 ---
 
@@ -130,3 +131,4 @@
 ---
 
 ## Добавлено агентами (без привязки к гейту)
+- [ ] (шаг 08) **Сверить списание DeepSeek за 15.10 с журналом** — запросы с `TimeoutError: нет полного ответа` (и `APITimeoutError` / `Connection error` у deepseek-v4-pro в `logs/calls.jsonl` 15.10) ответа не получили; если DeepSeek всё же их выполнил и списал деньги, в журнале этих токенов нет. Сравнить расход на https://platform.deepseek.com/usage за 15.10 с суммой tokens_in/out успешных вызовов deepseek-v4-pro за эту дату; расхождение упомянуть в разделе о стоимости (H6, H13) — *проверка: сравнение записано в `flow/HUMAN_NOTES.md`.*
