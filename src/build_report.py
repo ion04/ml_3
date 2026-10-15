@@ -27,6 +27,7 @@ import json
 import math
 import re
 import sys
+from datetime import datetime
 from pathlib import Path
 
 from src import analysis as an
@@ -352,6 +353,8 @@ def section_methods(h: Human, cfg: dict, models_cfg: dict, manifest: dict | None
         "**Вызовы по экспериментам** (все записи журнала, включая повторы после технических ошибок)",
         md_table(calls, ["experiment", "first_utc", "last_utc", "records", "ok", "errors", "retried_requests",
                          "unresolved_requests"]) if calls else NO_DATA,
+        "**Когда получены ответы: модель × эксперимент** (UTC, время отправки запроса, только успешные вызовы; без smoke и dev)",
+        periods_table(runs.get("models") or {}),
         "### 2.2. Параметры и окружение",
         kv_list(params),
         prompt_note,
@@ -388,6 +391,39 @@ def model_type_pivot(rows: list[dict]) -> str:
     cell = {(r["model_key"], r["type"]): ci(r, "accuracy") for r in rows}
     return md_table([{"model_key": m, **{t: cell.get((m, t), "—") for t in types}} for m in models],
                     ["model_key", *types])
+
+
+def period_cell(p: dict) -> str:
+    """«2026-10-15 03:19 … 03:51» (если день тот же) или с датами на обоих концах."""
+    first, last = p["first_utc"][:16].replace("T", " "), p["last_utc"][:16].replace("T", " ")
+    return f"{first} … {last[11:] if first[:10] == last[:10] else last}"
+
+
+def periods_table(models_runs: dict) -> str:
+    """Строки — модели, столбцы — эксперименты, ячейка — первый и последний успешный вызов (UTC, время отправки запроса)."""
+    exps = list(dict.fromkeys(e for u in models_runs.values() for e in (u.get("periods") or {})))
+    if not exps:
+        return NO_DATA
+    rows = [{"model_key": k, **{e: period_cell(u["periods"][e]) if e in (u.get("periods") or {}) else "—"
+                                for e in exps}} for k, u in models_runs.items()]
+    return md_table(sorted_by_role(rows, "model_key"), [("model_key", "модель")] + exps)
+
+
+def late_answers(models_runs: dict, min_hours: float = 1.0) -> list[str]:
+    """Модели, чей последний ответ в эксперименте позже, чем у раньше всех закончившей модели,
+    больше чем на min_hours (так видны дозапросы после недоступности API)."""
+    ends = {}
+    for k, u in models_runs.items():
+        for e, p in (u.get("periods") or {}).items():
+            ends.setdefault(e, {})[k] = datetime.fromisoformat(p["last_utc"])
+    out = []
+    for e, by_model in ends.items():
+        first_done = min(by_model, key=by_model.get)
+        for k, t in by_model.items():
+            hours = (t - by_model[first_done]).total_seconds() / 3600
+            if hours > min_hours:
+                out.append(f"{e}: последний ответ {k} на {hours:.1f} ч позже, чем у {first_done}")
+    return out
 
 
 def sorted_by_role(rows: list[dict], key: str) -> list[dict]:
@@ -551,6 +587,9 @@ def limitation_facts(cfg: dict, manifest: dict | None, summary: dict | None, pri
                   if v.get("unresolved_requests")}
     if unresolved:
         facts.append(f"запросы без ответа после повторов: {unresolved}")
+    late = late_answers((s.get("runs") or {}).get("models") or {})
+    if late:
+        facts.append("модели ответили в разное время (раздел 2.1, «Когда получены ответы»): " + "; ".join(late))
     incomplete = incomplete_runs(s.get("coverage"))
     if incomplete:
         facts.append("неполные прогоны (раздел 3.1): " + "; ".join(

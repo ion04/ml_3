@@ -1,8 +1,8 @@
 {
   "_comment": "Собрано src.manifest по журналу и таблицам; руками не править.",
   "demo": false,
-  "generated_utc": "2026-10-15T10:22:44+00:00",
-  "git_head": "76a58d2ee84bc5d2760b48e140fc8d99eb2d8504",
+  "generated_utc": "2026-10-15T10:28:27+00:00",
+  "git_head": "43538a62f67d50c41ef63bb86854127822380a8c",
   "log": "logs/calls.jsonl",
   "hypotheses": {
     "ids": [
@@ -146,7 +146,25 @@
       "unresolved_requests": 0,
       "tokens_in": 524055,
       "tokens_out": 190052,
-      "finish_reason_length": 0
+      "finish_reason_length": 0,
+      "periods": {
+        "cot": {
+          "first_utc": "2026-10-15T00:43:04.928+00:00",
+          "last_utc": "2026-10-15T09:52:10.102+00:00"
+        },
+        "followup_doubt": {
+          "first_utc": "2026-10-15T09:52:14.783+00:00",
+          "last_utc": "2026-10-15T09:52:56.023+00:00"
+        },
+        "main": {
+          "first_utc": "2026-10-15T00:39:12.717+00:00",
+          "last_utc": "2026-10-15T00:42:40.390+00:00"
+        },
+        "typeE": {
+          "first_utc": "2026-10-15T10:03:22.570+00:00",
+          "last_utc": "2026-10-15T10:22:30.275+00:00"
+        }
+      }
     },
     "gigachat-2-max": {
       "provider": "gigachat",
@@ -181,7 +199,25 @@
       "unresolved_requests": 0,
       "tokens_in": 76241,
       "tokens_out": 104429,
-      "finish_reason_length": 0
+      "finish_reason_length": 0,
+      "periods": {
+        "cot": {
+          "first_utc": "2026-10-15T00:43:04.928+00:00",
+          "last_utc": "2026-10-15T00:45:11.942+00:00"
+        },
+        "followup_doubt": {
+          "first_utc": "2026-10-15T01:22:28.418+00:00",
+          "last_utc": "2026-10-15T01:24:11.706+00:00"
+        },
+        "main": {
+          "first_utc": "2026-10-15T00:39:12.717+00:00",
+          "last_utc": "2026-10-15T00:42:47.868+00:00"
+        },
+        "typeE": {
+          "first_utc": "2026-10-15T03:19:10.759+00:00",
+          "last_utc": "2026-10-15T03:45:11.965+00:00"
+        }
+      }
     },
     "qwen3-8b": {
       "provider": "ollama",
@@ -222,6 +258,24 @@
       "tokens_in": 650912,
       "tokens_out": 259340,
       "finish_reason_length": 0,
+      "periods": {
+        "cot": {
+          "first_utc": "2026-10-15T00:43:04.928+00:00",
+          "last_utc": "2026-10-15T00:44:16.505+00:00"
+        },
+        "followup_doubt": {
+          "first_utc": "2026-10-15T01:22:28.419+00:00",
+          "last_utc": "2026-10-15T01:23:20.251+00:00"
+        },
+        "main": {
+          "first_utc": "2026-10-15T00:39:12.717+00:00",
+          "last_utc": "2026-10-15T00:41:22.363+00:00"
+        },
+        "typeE": {
+          "first_utc": "2026-10-15T03:19:10.759+00:00",
+          "last_utc": "2026-10-15T03:51:24.280+00:00"
+        }
+      },
       "ollama_base_url": [
         "http://localhost:11435"
       ],
@@ -264,6 +318,12 @@
       "tokens_in": 5056,
       "tokens_out": 17936,
       "finish_reason_length": 0,
+      "periods": {
+        "cot": {
+          "first_utc": "2026-10-15T00:44:22.632+00:00",
+          "last_utc": "2026-10-15T00:46:49.569+00:00"
+        }
+      },
       "ollama_base_url": [
         "http://localhost:11435"
       ],
@@ -303,7 +363,25 @@
       "unresolved_requests": 0,
       "tokens_in": 481381,
       "tokens_out": 73189,
-      "finish_reason_length": 0
+      "finish_reason_length": 0,
+      "periods": {
+        "cot": {
+          "first_utc": "2026-10-15T00:43:04.928+00:00",
+          "last_utc": "2026-10-15T00:43:19.102+00:00"
+        },
+        "followup_doubt": {
+          "first_utc": "2026-10-15T01:22:28.419+00:00",
+          "last_utc": "2026-10-15T01:22:41.231+00:00"
+        },
+        "main": {
+          "first_utc": "2026-10-15T00:39:12.717+00:00",
+          "last_utc": "2026-10-15T00:39:42.798+00:00"
+        },
+        "typeE": {
+          "first_utc": "2026-10-15T03:19:10.759+00:00",
+          "last_utc": "2026-10-15T03:26:35.912+00:00"
+        }
+      }
     }
   },
   "results": {

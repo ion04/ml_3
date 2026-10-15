@@ -244,3 +244,18 @@ def test_yandex_folder_masked_and_criterion_period(paths):
     block = br.hypothesis_block(br.Human(""), "H1", None, {"Прогноз": "x", "Критерий решения (тест, порог)": "y."},
                                 paths["figures"], False)
     assert "Критерий: y." in block and "y.." not in block
+
+
+def test_periods_table_and_late_answers():
+    # Периоды «модель × эксперимент» и модели, ответившие заметно позже остальных (дозапрос).
+    runs = {"m1": {"periods": {"main": {"first_utc": "2026-10-15T00:39:12+00:00", "last_utc": "2026-10-15T00:42:47+00:00"},
+                               "typeE": {"first_utc": "2026-10-15T03:19:10+00:00", "last_utc": "2026-10-16T01:00:00+00:00"}}},
+            "m2": {"periods": {"main": {"first_utc": "2026-10-15T00:39:12+00:00", "last_utc": "2026-10-15T00:40:00+00:00"},
+                               "typeE": {"first_utc": "2026-10-15T10:03:22+00:00", "last_utc": "2026-10-15T10:22:30+00:00"}}},
+            "m3": {}}
+    lines = br.periods_table(runs).splitlines()
+    assert lines[0] == "| модель | main | typeE |"
+    assert "| m1 | 2026-10-15 00:39 … 00:42 | 2026-10-15 03:19 … 2026-10-16 01:00 |" in lines
+    assert "| m3 | — | — |" in lines
+    assert br.late_answers(runs) == ["typeE: последний ответ m1 на 14.6 ч позже, чем у m2"]
+    assert br.periods_table({}) == br.NO_DATA and br.late_answers({}) == []

@@ -83,6 +83,12 @@ def by_model(records: list[dict], models_cfg: dict) -> dict:
             "tokens_out": sum(r["tokens_out"] or 0 for r in ok),
             "finish_reason_length": sum(r.get("finish_reason") == "length" for r in ok),
         }
+        # Когда получены ответы в каждом эксперименте (без попыток с техошибкой):
+        # модели могли ответить в разное время (дозапросы после недоступности API).
+        periods = {}
+        for r in ok:
+            periods.setdefault((r.get("meta") or {}).get("experiment", "?"), []).append(r["ts_utc"])
+        info["periods"] = {exp: {"first_utc": min(ts), "last_utc": max(ts)} for exp, ts in sorted(periods.items())}
         # params хранятся строками JSON (чтобы взять уникальные), возвращаем объекты.
         info["params"] = [json.loads(p) for p in info["params"]]
         if rs[0]["provider"] == "ollama":

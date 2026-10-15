@@ -61,6 +61,7 @@ def test_demo_manifest(env):
     assert set(m["models"]) == {"mock-ru1", "mock-ru2", "mock-big", "mock-local"}
     one = m["models"]["mock-ru1"]
     assert one["model_reported"] and one["experiments"] == ["main"] and one["errors"] == 0
+    assert list(one["periods"]) == ["main"] and one["periods"]["main"]["first_utc"] == one["first_utc"]
     rows = run_bank.read_jsonl(env / "demo" / "results" / "main_ru.jsonl")
     assert m["results"]["main_ru.jsonl"]["rows"] == len(rows)
     assert m["results"]["main_ru.jsonl"]["parse_ok"] == sum(r["parse_ok"] is True for r in rows)

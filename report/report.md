@@ -39,6 +39,10 @@
 
 _нет данных_
 
+**Когда получены ответы: модель × эксперимент** (UTC, время отправки запроса, только успешные вызовы; без smoke и dev)
+
+_нет данных_
+
 ### 2.2. Параметры и окружение
 
 - `temperature_main`: 0
@@ -50,7 +54,7 @@ _нет данных_
 
 Промпт в config: версия `v1`, отпечаток `d946bcbce2dd`; в коде: `v1`, `d946bcbce2dd`.
 
-Python 3.12.14, macOS-26.6.2-arm64-arm-64bit; пакеты: openai 3.27.0, gigachat 0.2.3, httpx 0.28.1, scikit-learn 1.9.1, numpy 2.5.3, pandas 3.0.6, scipy 1.18.1, statsmodels 0.15.0; sha256 `requirements.txt`: `a76e2dd16846`; git HEAD при сборке манифеста: `25dd11864a32`.
+Python 3.12.14, macOS-26.6.2-arm64-arm-64bit; пакеты: openai 3.27.0, gigachat 0.2.3, httpx 0.28.1, scikit-learn 1.9.1, numpy 2.5.3, pandas 3.0.6, scipy 1.18.1, statsmodels 0.15.0; sha256 `requirements.txt`: `a76e2dd16846`; git HEAD при сборке манифеста: `43538a62f67d`.
 
 ### 2.3. Железо для локальной модели
 
