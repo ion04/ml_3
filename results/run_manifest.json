@@ -1,8 +1,8 @@
 {
   "_comment": "Собрано src.manifest по журналу и таблицам; руками не править.",
   "demo": false,
-  "generated_utc": "2026-10-15T03:07:37+00:00",
-  "git_head": "cc31f375ddd2d7d38e2a6b3031957bbf99a055b8",
+  "generated_utc": "2026-10-15T03:51:54+00:00",
+  "git_head": "52933d1d334df7c1563119c18c9b510dbb3d84ae",
   "log": "logs/calls.jsonl",
   "hypotheses": {
     "ids": [
@@ -89,11 +89,20 @@
     },
     "smoke": {
       "first_utc": "2026-10-09T17:52:54.153+00:00",
-      "last_utc": "2026-10-15T02:01:06.159+00:00",
-      "records": 46,
-      "ok": 44,
-      "errors": 2,
-      "retried_requests": 2,
+      "last_utc": "2026-10-15T03:23:23.247+00:00",
+      "records": 56,
+      "ok": 47,
+      "errors": 9,
+      "retried_requests": 3,
+      "unresolved_requests": 0
+    },
+    "typeE": {
+      "first_utc": "2026-10-15T03:19:10.759+00:00",
+      "last_utc": "2026-10-15T03:51:24.280+00:00",
+      "records": 1800,
+      "ok": 1800,
+      "errors": 0,
+      "retried_requests": 0,
       "unresolved_requests": 0
     }
   },
@@ -158,17 +167,18 @@
       "experiments": [
         "cot",
         "followup_doubt",
-        "main"
+        "main",
+        "typeE"
       ],
       "first_utc": "2026-10-15T00:39:12.717+00:00",
-      "last_utc": "2026-10-15T01:24:11.706+00:00",
-      "records": 75,
-      "ok": 75,
+      "last_utc": "2026-10-15T03:45:11.965+00:00",
+      "records": 675,
+      "ok": 675,
       "errors": 0,
       "retried_requests": 0,
       "unresolved_requests": 0,
-      "tokens_in": 19016,
-      "tokens_out": 27786,
+      "tokens_in": 76241,
+      "tokens_out": 104429,
       "finish_reason_length": 0
     },
     "qwen3-8b": {
@@ -197,17 +207,18 @@
       "experiments": [
         "cot",
         "followup_doubt",
-        "main"
+        "main",
+        "typeE"
       ],
       "first_utc": "2026-10-15T00:39:12.717+00:00",
-      "last_utc": "2026-10-15T01:23:20.251+00:00",
-      "records": 73,
-      "ok": 73,
+      "last_utc": "2026-10-15T03:51:24.280+00:00",
+      "records": 673,
+      "ok": 673,
       "errors": 0,
       "retried_requests": 0,
       "unresolved_requests": 0,
-      "tokens_in": 33254,
-      "tokens_out": 31192,
+      "tokens_in": 650912,
+      "tokens_out": 259340,
       "finish_reason_length": 0,
       "ollama_base_url": [
         "http://localhost:11435"
@@ -278,17 +289,18 @@
       "experiments": [
         "cot",
         "followup_doubt",
-        "main"
+        "main",
+        "typeE"
       ],
       "first_utc": "2026-10-15T00:39:12.717+00:00",
-      "last_utc": "2026-10-15T01:22:41.231+00:00",
-      "records": 76,
-      "ok": 76,
+      "last_utc": "2026-10-15T03:26:35.912+00:00",
+      "records": 676,
+      "ok": 676,
       "errors": 0,
       "retried_requests": 0,
       "unresolved_requests": 0,
-      "tokens_in": 26123,
-      "tokens_out": 24717,
+      "tokens_in": 481381,
+      "tokens_out": 73189,
       "finish_reason_length": 0
     }
   },
@@ -383,6 +395,19 @@
       "parse_ok": 149,
       "models": [
         "deepseek-v4-pro",
+        "gigachat-2-max",
+        "qwen3-8b",
+        "yandexgpt-pro-5.1"
+      ],
+      "prompt_version": [
+        "v1"
+      ]
+    },
+    "typeE_llm.jsonl": {
+      "rows": 1800,
+      "errors": 0,
+      "parse_ok": 1790,
+      "models": [
         "gigachat-2-max",
         "qwen3-8b",
         "yandexgpt-pro-5.1"

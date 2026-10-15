@@ -1,43 +1,38 @@
 STATUS: deferred
 ## Сделано
-- Реальный прогон E НЕ запускался: ключей GigaChat/Yandex/DeepSeek нет (smoke 1 из 4, ответила только qwen3-8b на gpu), шаг 07 deferred (промпт не заморожен), гипотезы не закоммичены. `run_classifier` без --demo: «не запущен», код 1, вызовов нет. Журнал 34 → 35 записей (+1 smoke от моей проверки).
-- Новый `src/typeE_metrics.py`:
-  - `table` (по умолчанию) → `results/typeE_metrics.csv` (`--demo` → `demo/results/`);
-  - `check --limit 20` — формат пробного прогона по группам модель × примеры: parse_ok, ответы 0/1, «нельзя определить», None, техошибки, finish_reason=length. Код 4 (`EXIT_FORMAT`), если parse_ok < 90% (`--min-parse-ok`); код 2, если строк нет.
-- `scripts/run_experiments.sh`, шаг 6: 6a пробный прогон → `typeE_metrics check --limit 20` → 6b полный → 6c `typeE_metrics`.
-- `tests/test_typeE_metrics.py` (5 тестов), README п. 6, HUMAN_TODO G1 «Тип E» (+3 пункта шага 09).
+- 15.10: G1 пройден, промпт заморожен (v1, d946bcbce2dd), гипотезы закоммичены 14.10 (67d7108) — до первого вызова E. Туннель gpu: `scripts/ensure_gpu_ollama.sh` → 0.
+- Smoke: GigaChat и Yandex ok; **DeepSeek снова не отвечает** (03:08, 03:13, 03:51 UTC — TimeoutError 300 с, записи smoke в журнале). Пробы останавливал вручную, чтобы не ждать 5×300 с.
+- Пробный прогон E (`--limit 20`, gigachat-2-max, yandexgpt-pro-5.1, qwen3-8b; 0/5/20): 180 вызовов, ошибок 0; `typeE_metrics check --limit 20` → код 0 (parse_ok ≥ 95% во всех группах). Формат не ломается — к шагу 07 не возвращаемся.
+- Полный прогон 200 строк × 0/5/20 для тех же 3 моделей: 1800 строк (1620 новых + 180 из кэша), техошибок 0, parse_ok 1790/1800 (gigachat 5-shot 190/200, остальные 200/200), finish_reason=length 0, «нельзя определить» 1 (gigachat 0-shot). Вызовы 15.10 03:19–03:51 UTC.
+- `results/typeE_metrics.csv`: LLM 9 строк (все complete=True), классических 11. `src.manifest` пересобран.
+- HUMAN_TODO: G1.7 пункт «коммит гипотез перед E» закрыт (вопрос снят); G1.8 новый пункт «Дозапросить DeepSeek для типа E».
 ## Ключевые файлы и точки входа
-- `.venv/bin/python -m src.typeE_metrics [check --limit N] [--demo] [--min-parse-ok 0.9]`.
-- `typeE_metrics.build(llm_path, classical_path, split) -> DataFrame` (колонки `COLUMNS`), `llm_table(rows, split)`, `llm_group(rows)`, `classical_table(csv_df)`, `format_table`, `check`.
-- Строки CSV:
-  - `source=llm`: model × shots × lang, eval_set=test, train_set none|prompt;
-  - `source=classical`: fixed (LogReg/NB/Dummy на 5 и 20 примерах), resample (среднее по 20 + `*_sd`, `n_resamples`), constant eval_set=full.
-- Колонки: n_eval, n_eval_failures, n_answered, coverage, n_cannot_determine, n_refused_or_unparsed, n_tech_error, complete, f1_failure, balanced_accuracy, accuracy, precision/recall_failure, tp/fp/fn/tn, *_answered, tokens_in/out mean/sum, latency_s mean/median, prompt_version, split_hash, model_reported.
+- `results/typeE_llm.jsonl` (1800 строк), `results/typeE_metrics.csv`, `results/run_manifest.json`, `logs/calls.jsonl` (2282 строки).
+- Логи запусков (не в git): `flow/logs/step09_trial.log`, `step09_full.log`, `step09_deepseek_probe.log`.
+- Команды: `src.run_classifier --models <ключи> --shots 0,5,20 [--limit 20]`, `src.typeE_metrics [check --limit N]`.
 ## Решения и допущения
-- LLM-строки фильтруются так: experiment=typeE, строки теста из e_split.json, текущий split_hash.
-- Неответ (value не 0/1) в основных метриках считается ошибкой: при y=1 → fn, при y=0 → fp. Так у LLM и классических моделей n_eval = 200. Метрики только по ответам 0/1 — в `*_answered` + `coverage`.
-- Техошибки исключены из метрик (`n_tech_error`). `complete` = нет техошибок и покрыты все строки теста.
-- Порог формата пробного прогона — 90% parse_ok. Если формат ломается, это стоп и возврат к шагу 07; промпт здесь не правится.
-- Проверка «гипотезы закоммичены» для E оставлена, хотя в задании шага сказано, что она не нужна: по CLAUDE.md гипотезы коммитятся до любых оценочных прогонов, а H12 строится на E. Решение вынесено в HUMAN_TODO G1.
-- Реальный `results/typeE_metrics.csv` не создавал: без LLM-строк он выглядел бы как готовая таблица. Создаётся после прогона.
-- Классические строки берутся из реального `results/typeE_classical.csv` (без API) и в demo тоже; LLM-строки в demo — mock.
+- E запущен для трёх отвечающих моделей через `--models`, без DeepSeek (иначе 600 вызовов × до 5 попыток по 300 с). `write_results` сливает строки: DeepSeek допишется в те же таблицы, остальное возьмётся из кэша.
+- Мой ошибочный запуск `src.smoke_test --help` (флага нет, тест запустился) пересёкся с GigaChat-прогоном E в 1 потоке: 3 записи smoke gigachat с HTTP 429 (ретраи, видно в журнале), затем ok. На прогон E 429 не повлияли (ошибок 0).
+- qwen3-8b рассуждает в видимом тексте перед «ОТВЕТ:» (вых. токенов в среднем 190–550, все finish=stop) — это не режим think; при сравнении токенов/задержки учитывать.
+- Метрики и выводы в handoff не пишу (правило CLAUDE.md); числа — только из CSV/ноутбука.
 ## Проверка
-- `.venv/bin/python -m pytest -q`: 429 passed (было 424). Тесты: неответы и техошибки, фильтры и complete, resample = среднее/sd CSV, коды check 0/4/2, сквозной demo.
-- `scripts/run_experiments.sh --demo`: «=== Готово ===». Шаг 6: check «Формат в норме» (12 групп), `demo/results/typeE_metrics.csv`: LLM 12 строк, классических 11. Повтор — всё из кэша.
-- `typeE_classical.csv` пересобран скриптом без изменений (git diff пуст).
+- `.venv/bin/python -m pytest -q`: 592 passed.
+- `src.typeE_metrics check` (полный): «Формат в норме», 9 групп × 200 строк.
+- `src.manifest`: typeE 1800 записей, ок 1800, ошибок 0. «Без ответа 3» — это старые deepseek cot шага 08.
+- Журнал только дописывался: `git diff` по logs/calls.jsonl — 0 удалённых строк, все строки JSON. `.env`, `demo/` не в коммите.
 ## Что нужно для завершения
-- G1: ключи в `.env`, smoke 4/4, гипотезы закоммичены (или решение человека снять это требование для E), шаг 07 done (`prompt_version`/`prompt_hash` в config). ПК gpu включён (`scripts/ensure_gpu_ollama.sh` → 0).
-- Повтор шага 09:
-  1. `scripts/ensure_gpu_ollama.sh`.
-  2. `src.run_classifier --models all --shots 0,5,20 --limit 20`; при коде 3 повторить.
-  3. `src.typeE_metrics check --limit 20`. Код 4 → шаг 09 blocked, вернуться к 07.
-  4. `src.run_classifier --models all --shots 0,5,20` (код 3 → повтор), затем `src.typeE_metrics`, `src.manifest`.
-  5. В handoff только количества (вызовы, ошибки, parse_ok, complete), без метрик и выводов. Коммит с logs/ и results/.
+- DeepSeek отвечает: smoke-строка deepseek `ok` (`.venv/bin/python -m src.smoke_test`; у скрипта нет `--help`).
+- Затем:
+  1. `.venv/bin/python -m src.run_classifier --models deepseek-v4-pro --shots 0,5,20 --limit 20` → `.venv/bin/python -m src.typeE_metrics check --limit 20` (код 4 → blocked, к шагу 07);
+  2. то же без `--limit` (код 3 → повтор);
+  3. `.venv/bin/python -m src.typeE_metrics`, `.venv/bin/python -m src.manifest`; ожидается 12 строк LLM, все complete=True;
+  4. коммит `step 09: DeepSeek тип E` с logs/ и results/.
+- Остальные модели повторять не нужно (кэш). Альтернатива при долгой недоступности — решение человека (HUMAN_TODO G1.8): E на трёх моделях с пометкой в ограничениях.
 ## Открытые вопросы и риски
-- Бюджет: 2400 вызовов, GigaChat в 1 поток (~600 вызовов на модель). Бесплатных лимитов может не хватить (HUMAN_TODO G1, шаг 06).
-- qwen3-8b на dev рассуждает перед ответом (~230 токенов, ~12 с на вызов): 600 вызовов ≈ 2 ч на gpu, сбои RAM переживаются кэшем.
-- Если в группе один класс (маленький --limit), sklearn предупреждает в balanced_accuracy. На 200 строках теста этого нет.
-- Правило «неответ = ошибка» спорное: и основные, и `*_answered` числа есть, выбор для отчёта за человеком.
+- Если DeepSeek вернётся позже, его ответы E будут получены в другую дату — указать в ограничениях (даты в журнале/манифесте).
+- Возможное списание DeepSeek за зависшие запросы (пункт шага 08 в «Добавлено агентами»).
+- 10 ответов gigachat 5-shot с parse_ok=False (метка взята эвристикой) — в parser_spotcheck шага 10 в первую очередь.
+- У GigaChat tokens_in занижен кэшем префикса (полный вход = tokens_in + tokens_cached), особенно в 5/20-shot.
 ## Для следующих шагов
-- Шаг 11: в ноутбуке вызывать `typeE_metrics.build(results/typeE_llm.jsonl)` (числа считаются по таблице из журнала), а не вписывать CSV руками. H12: пары LLM k-shot ↔ LogReg fixed k-shot на тех же 200 строках (Макнемар по `typeE_llm.jsonl` row_idx + предсказаниям LogReg, их пересчитать через `typeE.make_models`).
-- Шаг 12: проверка воспроизводимости — `src.typeE_metrics` должен давать тот же CSV.
+- Шаг 10: parser_spotcheck — включить строки typeE с parse_ok=False (gigachat) и одну «нельзя определить».
+- Шаг 11: `typeE_metrics.build(results/typeE_llm.jsonl)`; пока группы только для 3 моделей — ноутбук не должен падать без deepseek. H12 (если понадобится): LLM k-shot vs LogReg fixed k-shot, Макнемар по row_idx.
