@@ -41,6 +41,9 @@ KAPPA_MIN = 0.6             # ниже — уточнить рубрику и п
 ECE_BINS = 5                # корзины по заявленной уверенности: [0; 20), [20; 40), …, [80; 100]
 CALIB_TYPES = ["A", "B", "F"]   # H10: типы с автоматической бинарной проверкой
 RU_ROLES = ["ru1", "ru2"]   # H4: российские модели; остальные роли — зарубежные
+# Провайдеры, у которых tokens_in НЕ включает токены из кэша префикса (GigaChat: precached_prompt_tokens не
+# тарифицируются и в prompt_tokens не входят). У DeepSeek и Yandex токены из кэша уже входят в tokens_in.
+CACHE_OUTSIDE_TOKENS_IN = {"gigachat"}
 # Цвета моделей по роли: первые 4 цвета категориальной палитры, порядок фиксирован (не по рангу).
 ROLE_COLORS = {"ru1": "#2a78d6", "ru2": "#eb6834", "big": "#1baf7a", "local": "#eda100"}
 OTHER_COLOR = "#8a8984"
@@ -603,6 +606,7 @@ def cost_table(df: pd.DataFrame, pricing: dict, models: dict, n_boot: int, seed:
                     "accuracy": g["correct"].mean(), "n_correct": n_correct,
                     "latency_s_mean": g["latency_s"].mean(), "latency_s_median": g["latency_s"].median(),
                     "tokens_in_mean": g["tokens_in"].mean(), "tokens_out_mean": g["tokens_out"].mean(),
+                    "tokens_in_full_mean": g["tokens_in_full"].mean() if "tokens_in_full" in g else np.nan,
                     "cost_rub_total": g["cost_rub"].sum() if priced else np.nan,
                     "cost_rub_per_task": g["cost_rub"].mean() if priced else np.nan,
                     "rub_per_correct": g["cost_rub"].sum() / n_correct if priced and n_correct > 0 else np.nan,
@@ -627,6 +631,45 @@ def local_memory(log_path: Path, call_ids: set) -> pd.DataFrame:
                     "ollama_base_url": ";".join(sorted({str(r.get("ollama_base_url")) for r in g
                                                         if r.get("ollama_base_url")}))})
     return pd.DataFrame(out)
+
+
+def add_full_input(df: pd.DataFrame, log_path: Path, models: dict) -> pd.DataFrame:
+    """Столбец tokens_in_full — полный размер входа (для сравнения длины промптов, H6).
+    У GigaChat tokens_in не включает токены из кэша префикса, поэтому к нему прибавляется tokens_cached из журнала;
+    у остальных провайдеров tokens_in уже полный. Рубли по-прежнему считаются по tokens_in (кэш GigaChat бесплатен)."""
+    if df.empty:
+        return df
+    cached = {r["call_id"]: r.get("tokens_cached") or 0 for r in run_bank.read_jsonl(log_path) if r.get("call_id")}
+    extra = [cached.get(c, 0) if models.get(m, {}).get("provider") in CACHE_OUTSIDE_TOKENS_IN else 0
+             for c, m in zip(df["call_id"], df["model_key"])]
+    return df.assign(tokens_in_full=df["tokens_in"] + extra)
+
+
+# ---------- Полнота прогонов ----------
+
+def coverage_table(got: pd.DataFrame, expected: dict) -> pd.DataFrame:
+    """Сколько ответов без техошибки получено у каждой модели из ожидаемого числа (expected: модель → число).
+    Так видно, у какой модели прогон неполный (например, API был недоступен) и на скольких ответах стоят её числа."""
+    n = got["model_key"].value_counts() if not got.empty else pd.Series(dtype=int)
+    t = pd.DataFrame([{"model_key": m, "n_expected": int(e), "n_got": int(n.get(m, 0))} for m, e in expected.items()])
+    if t.empty:
+        return t
+    t["complete"] = t["n_got"] >= t["n_expected"]
+    return t
+
+
+def expected_cot(main: pd.DataFrame, models: list[str], types: list[str] | None) -> dict:
+    """H6: каждая модель (и модели режима рассуждений) отвечает в cot на все задачи нужных типов из main."""
+    tasks = main[main["type"].isin(types)] if types else main
+    return {m: tasks["task_id"].nunique() for m in models}
+
+
+def expected_followup(main_rows: pd.DataFrame, types: list[str] | None) -> dict:
+    """H9: второй ход задаётся там, где ответ main был верным при прогоне (как в src.run_extra.jobs_followup)."""
+    ok = main_rows[(main_rows["correct"] == True) & (main_rows["variant"] == "base")]  # noqa: E712 (None ≠ True)
+    if types:
+        ok = ok[ok["type"].isin(types)]
+    return {m: int((ok["model_key"] == m).sum()) for m in main_rows["model_key"].unique()}
 
 
 # ---------- Гипотезы ----------
@@ -774,6 +817,7 @@ def h6_tables(main: pd.DataFrame, cot: pd.DataFrame, models: dict, pricing: dict
     """H6: точность main и cot на A и B (Макнемар по всем моделям вместе, по типам) и отношение токенов
     и стоимости cot / main по моделям. Модели режима рассуждений (qwen3-8b-think) сравниваются с базовой."""
     main_models = list(main["model_key"].unique())
+    tin = "tokens_in_full" if "tokens_in_full" in cot.columns and "tokens_in_full" in main.columns else "tokens_in"
     cot = cot.assign(base_model=[base_model_for(m, main_models, models) for m in cot["model_key"]])
     pairs = cot.rename(columns={"model_key": "cot_model", "base_model": "model_key"}) \
         [["model_key", "cot_model", "task_id", "type", "correct", "tokens_in", "tokens_out"]] \
@@ -795,8 +839,9 @@ def h6_tables(main: pd.DataFrame, cot: pd.DataFrame, models: dict, pricing: dict
         tok.append({"cot_model": cm, "main_model": bm, "n": len(g),
                     "tokens_out_mean_cot": g["tokens_out"].mean(), "tokens_out_mean_main": mg["tokens_out"].mean(),
                     "tokens_out_ratio": g["tokens_out"].mean() / mg["tokens_out"].mean() if len(mg) else np.nan,
-                    "tokens_total_ratio": (g["tokens_in"] + g["tokens_out"]).mean()
-                    / (mg["tokens_in"] + mg["tokens_out"]).mean() if len(mg) else np.nan,
+                    # размер вход + выход; у GigaChat вход с токенами из кэша (tokens_in_full, если посчитан)
+                    "tokens_total_ratio": (g[tin] + g["tokens_out"]).mean()
+                    / (mg[tin] + mg["tokens_out"]).mean() if len(mg) else np.nan,
                     "cost_ratio": g["cost_rub"].sum() / mg["cost_rub"].sum()
                     if len(mg) and mg["cost_rub"].sum() > 0 else np.nan,
                     "latency_ratio": g["latency_s"].mean() / mg["latency_s"].mean()
@@ -951,7 +996,7 @@ def write_summary(summary: dict, path: Path) -> None:
 def input_fingerprints(p: dict) -> dict:
     """sha256 (первые 12 знаков) входных файлов: по ним видно, из каких данных посчитаны числа."""
     files = sorted(p["results"].glob("*.jsonl")) + sorted(p["results"].glob("*.csv")) \
-        + sorted(p["grading"].glob("*.csv")) + [p["pricing"], ROOT / "config" / "experiment.json"]
+        + sorted(p["grading"].glob("*.csv")) + [p["pricing"], ROOT / "config" / "experiment.json", p["log"]]
     out = {}
     for f in files:
         if f.exists() and not f.name.startswith("dev_"):

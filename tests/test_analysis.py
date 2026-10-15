@@ -385,3 +385,28 @@ def test_answers_value_fallback_without_autograde(tmp_path):
     write_jsonl(res / "graded_auto.jsonl", [])
     df, _ = an.answers(res, "main", "ru", pd.DataFrame())
     assert df["value"].iloc[0] == 0.3 and not df["has_auto"].iloc[0] and np.isnan(df["correct"].iloc[0])
+
+
+def test_add_full_input_only_for_gigachat(tmp_path):
+    # GigaChat: tokens_in без токенов из кэша → прибавляем tokens_cached из журнала; у остальных tokens_in полный.
+    log = tmp_path / "calls.jsonl"
+    write_jsonl(log, [{"call_id": "c1", "tokens_cached": 50}, {"call_id": "c2", "tokens_cached": 30},
+                      {"call_id": "c3", "tokens_cached": None}])
+    df = pd.DataFrame([row("m-ru1", "A1", "A", "c1"), row("m-big", "A1", "A", "c2"), row("m-ru1", "A2", "A", "c3")])
+    out = an.add_full_input(df, log, MODELS)
+    assert out["tokens_in_full"].tolist() == [150, 100, 100]
+    assert out["tokens_in"].tolist() == [100, 100, 100]      # ₽ считаются по tokens_in, он не меняется
+
+
+def test_coverage_and_expected_counts():
+    main = pd.DataFrame([row("m-ru1", "A1", "A", "c1", correct=True), row("m-ru1", "B1", "B", "c2", correct=False),
+                         row("m-big", "A1", "A", "c3", correct=True), row("m-big", "C1", "C", "c4", correct=None),
+                         row("m-big", "B1", "B", "c5", correct=True)])
+    assert an.expected_cot(main, ["m-ru1", "m-big", "m-loc-think"], ["A", "B"]) == \
+        {"m-ru1": 2, "m-big": 2, "m-loc-think": 2}
+    assert an.expected_followup(main, ["A", "B", "F"]) == {"m-ru1": 1, "m-big": 2}
+    got = pd.DataFrame([{"model_key": "m-ru1"}, {"model_key": "m-big"}, {"model_key": "m-big"}])
+    cov = an.coverage_table(got, {"m-ru1": 1, "m-big": 2, "m-loc": 3})
+    assert cov["n_got"].tolist() == [1, 2, 0]
+    assert cov["complete"].tolist() == [True, True, False]
+    assert an.coverage_table(pd.DataFrame(), {}).empty

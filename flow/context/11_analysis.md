@@ -1,54 +1,38 @@
 STATUS: deferred
 ## Сделано
-- Реальных результатов нет: шаги 07–10 отложены, гейты G1 и G2 не пройдены. Поэтому ноутбук проверен на demo, а в репозиторий сохранён с `DEMO = False` и без выходов. Реальные `summary_metrics.json` и рисунки не создавались.
-- `src/analysis.py` — вся логика анализа (ноутбук только вызывает функции и рисует). Что считает:
-  - деанонимизация листов по ключу, среднее двух проверяющих, список расхождений, каппа Коэна;
-  - `answers()`: автопроверка из graded_auto плюс ручные оценки по call_id;
-  - точность и две версии при отказах (вопрос 9), бутстреп по задачам (кластерный), Макнемар для 6 пар + Холм, Клоппер–Пирсон;
-  - тип D, тип E и H12 (LogReg переобучается на тех же примерах), ECE;
-  - цена: ₽ за правильный ответ с CI, память локальной модели из журнала;
-  - функции H1–H13, графики, экспорт JSON.
-- `analysis.ipynb` (76 ячеек), разделы: 0 загрузка, листы, выборка парсера → 1 каппа (κ<0,6 — заметное предупреждение) → 2 точность (модель / тип / модель×тип, балл 0–2, тепловая карта, CI) → 3 Макнемар → 4 D → 5 E → 6 H1–H12 → 7 цена и скорость, «стоимость – точность», H13 → 8 экспорт `results/summary_metrics.json`.
-  - У каждой гипотезы: метрика, тест, рисунок и ячейка «**Вывод (заполняет человек):** …».
-  - Блок считается, только если для него есть данные. Выбранные гипотезы помечены «ВЫБРАНА».
-- `src/demo_grades.py`: случайные оценки только в `demo/grading/`, при пути вне demo/ — ValueError. r2 отличается от r1 в ~15% клеток.
-- `scripts/run_analysis.sh [--demo]`; в `run_experiments.sh` добавлен шаг 9 (в demo запускает анализ, в реальном режиме печатает подсказку «после G2»). Обновлены README п. 8 и HUMAN_TODO (G2, G3, «в любой момент»).
-- `tests/test_analysis.py`: 30 тестов.
+- Попытка 2 (15.10): реальные данные шагов 08–10 есть, ручных оценок нет (`src.checks g2`: 4 из 4 ✗). Ноутбук впервые прогнан на **реальных** данных во временном git worktree (/tmp, удалён), чтобы `results/` и `report/` в репозитории не менялись: выполняется полностью.
+  - Второй прогон в той же копии со случайными оценками в листах (через `demo_grades.fill`, только в /tmp): ветки каппы, C/D, баллов 0–2, H11 и выборки парсера работают на реальной структуре листов.
+- Исправлено и добавлено:
+  - ячейка 0.3 падала (ValueError), когда `parser_spotcheck.csv` есть, но `human_agrees` пуст. Теперь печатается «ещё не заполнена»;
+  - **полнота прогонов**: `an.coverage_table`, `expected_cot`, `expected_followup`. Таблицы «полнота прогона» в разделах E, H6 и H9 и предупреждение «ВНИМАНИЕ: … неполный у: <модель>» → `summary["coverage"]` (typeE, cot, followup_doubt). Сейчас неполный только deepseek-v4-pro: cot 6/16, followup 0/26, E 0/600;
+  - `an.add_full_input`: столбец `tokens_in_full`, для GigaChat это `tokens_in + tokens_cached` из журнала. Используется в H6 `tokens_total_ratio` и в таблице цены (`tokens_in_full_mean`). ₽ по-прежнему считаются по `tokens_in`;
+  - в разделе D: предупреждение, если упавший код отмечен «метрика верна» (по `INSTRUCTIONS.md` там должен стоять 0);
+  - в `inputs` (sha256 входов) добавлен журнал `logs/calls.jsonl`.
+- 2 новых теста в `tests/test_analysis.py`. HUMAN_TODO G3.1: правило про токены H6 и проверка таблиц полноты.
 ## Ключевые файлы и точки входа
-- `scripts/run_analysis.sh` — реальный режим, nbconvert `--execute --inplace`; `--demo` → `demo/analysis_demo.ipynb`, `demo/report/figures/`, `demo/results/summary_metrics.json`.
-- `an.paths(demo)`, `load_manual`, `kappa_table`, `disagreements`, `answers(results, exp, lang, manual, graded)` → столбцы correct (1 / 0 / 0,5 / NaN), refusal, abstain, has_auto.
-- Таблицы и тесты: `acc_table`, `cluster_bootstrap`, `mcnemar_test/_pairs`, `typeD_table`, `typeE_table`, `h12_table`, `calibration_table`, `cost_table`, `h1_pairs`, `h3_table`, `h4…h11`, `h13_summary`.
-- Вывод и экспорт: `write_summary`, `show`, `save_fig` (на рисунок ставится водяной знак DEMO).
-- Рисунки: `heatmap_model_type`, `accuracy_ci`, `cost_accuracy`, `typeD_checklist`, `typeE_shots`, `H1…H12_*.png` → `report/figures/`.
+- `analysis.ipynb` (сохранён с `DEMO = False`, без выходов), `src/analysis.py`, `scripts/run_analysis.sh [--demo]`.
+- Ключи `results/summary_metrics.json`: прежние (counts, kappa, accuracy_*, mcnemar_models, typeD, typeE, typeE_ci, hypotheses.H*, cost, cost_typeE, local_model, pricing, parser_spotcheck, inputs, bank, runs) + новый `coverage`.
 ## Решения и допущения
-Все подтверждает человек, пункт в HUMAN_TODO G3.
-- «Верно»: C — балл ≥ 1 (`C_CORRECT_MIN_SCORE`); D — ручная отметка «метрика верна» (авто «верно» = 1); итог — среднее двух проверяющих, 0,5 в точности = половина; в парных тестах 0,5 и NaN исключаются; неполная строка C/D — NaN.
-- Точность банка = main RU по A, B (вердикт), C, D, F. Тип E считается отдельно. Балл 0–2 B/C — отдельная таблица.
-- Значение и отказ берутся из graded_auto (повторный разбор), если ответ там есть, иначе — разбор при прогоне.
-- По гипотезам:
-  - H6: режим рассуждений (think) — отдельная группа, общей строки нет;
-  - H7: «верно» большинства — по graded_auto (majority_call_id); техошибки повторов не считаются разбросом;
-  - H10: A/B/F, 5 корзин равной ширины;
-  - H12: неответ = ошибка, фильтр по языку;
-  - H13: локальная модель исключена; CI ₽ за верный ответ может иметь верхнюю границу inf;
-  - H2: доля ответов ≈ P(+|D) не считается (в банке нет такого поля).
-- Ноутбук пишет `summary_metrics.json`, только если есть main или ответы LLM на E. Без данных не пишет ничего.
-- Генератор ноутбука не хранится: дальше ноутбук правится руками (человек вписывает выводы).
+- Реальные выходы, рисунки и summary_metrics.json в репозиторий не записывал. Без C/D (ручные оценки) точность по моделям считается только по A/B/F, поэтому числа неокончательные. Каппа и тарифы тоже не проверены.
+- Ожидаемое число ответов: cot = все задачи типов `extra_runs.cot.types` для моделей main и `extra_models`; followup = ответы main, верные **при прогоне** (как `run_extra.jobs_followup`); E = n_test × число вариантов shots.
+- Правила подсчёта из попытки 1 не менялись (подтверждение — HUMAN_TODO G3.1).
 ## Проверка
-- `.venv/bin/python -m pytest -q`: 497 passed (было 467). 2 предупреждения — из старого `test_typeE_metrics`.
-- `scripts/run_analysis.sh --demo`: без ошибок, 15 рисунков с DEMO, `demo/results/summary_metrics.json`.
-- Копия с `DEMO = False` выполнена nbconvert в /tmp: ошибок нет, везде «нет данных». `git status` по `results/` и `report/` пуст.
-- Ревью субагентом: 7 ошибок исправлены и закрыты тестами (pandas 3: None→NaN в листах; H6 удваивал main; H7 без повторной автопроверки и с техошибками в разбросе; inf в CI ₽; нет запасного значения без graded_auto; язык в H12).
+- `.venv/bin/python -m pytest -q`: 594 passed.
+- Реальные данные (копия): nbconvert без ошибок. Два запуска подряд дают побайтно одинаковый `summary_metrics.json`. Выборочно сверил: CI [0; 0] у H1 «все» верен (оба расхождения в одной паре P3), n в H6/H9 совпадают с манифестом.
+- `scripts/run_analysis.sh --demo`: без ошибок.
+- `git status` перед коммитом: изменены только `analysis.ipynb`, `src/analysis.py`, `tests/test_analysis.py`, `HUMAN_TODO.md` и этот файл.
 ## Что нужно для завершения
-- G1 → шаги 07–10 done (реальные `results/*.jsonl`, `graded_auto.jsonl`); G2: листы r1/r2, spotcheck, тарифы (`src.checks g2` = 0).
+- G2: листы r1/r2, spotcheck, тарифы → `.venv/bin/python -m src.checks g2` = 0, коммит листов.
+- Желательно до этого: дозапрос DeepSeek (HUMAN_TODO G1.8) → `src.autograde` → коммит. Либо человек решает обойтись тремя моделями в H6/H9/E (тогда предупреждения о полноте остаются и идут в ограничения).
 - Затем повторить шаг 11:
   1. `scripts/run_analysis.sh`;
-  2. проверить раздел 1: если κ < 0,6 у B, C или D, STATUS: blocked и пункт в G2 «уточнить рубрику и переоценить» (уже есть в HUMAN_TODO);
-  3. коммит `analysis.ipynb` (с выходами), `report/figures/`, `results/summary_metrics.json`.
+  2. раздел 1: если κ < 0,6 у B, C или D — STATUS: blocked (пункт уже есть в G2);
+  3. проверить таблицы полноты и предупреждение раздела D;
+  4. коммит `analysis.ipynb` (с выходами), `report/figures/`, `results/summary_metrics.json`.
 ## Открытые вопросы и риски
-- В demo нет F-задач (все в статусе todo), поэтому H1/H3 на demo не проверены вживую, только тестами.
-- Блоки 13 гипотез длинные. Невыбранные человек может удалить; тест требует ≥3 ячеек «Вывод».
-- В `flow/README.md`, `flow/flow.py` и `flow/steps/13_qa_audit.md` есть чужие незакоммиченные изменения — я их не трогал и не коммитил.
+- `graded_auto.jsonl` нужно пересобрать (`src.autograde`) после дозапроса DeepSeek и после решения G2 о числах «0.32;0.1987;0.1213» у qwen. Ноутбук его не пересобирает.
+- Таблица «Тип E: токены и стоимость» отсортирована по алфавиту, а не по ролям (косметика).
+- В `flow/README.md` и др. могут быть чужие незакоммиченные правки — не трогал.
 ## Для следующих шагов
-- Шаг 12: числа в отчёт брать только из `results/summary_metrics.json`. Ключи: counts, kappa, accuracy_by_model/_type/_model_type, mcnemar_models, typeD, typeE, hypotheses.H*, cost, cost_typeE, local_model, pricing, parser_spotcheck, inputs (sha256 входов).
-- Проверка воспроизводимости: повторный `scripts/run_analysis.sh` даёт тот же JSON (меток времени в нём нет).
+- Шаг 12: `build_report` пока не выводит `summary["coverage"]` и `tokens_in_full_mean`. Если данные DeepSeek останутся неполными, добавить таблицу полноты в отчёт (ограничения).
+- Воспроизводимость: повторный `scripts/run_analysis.sh` даёт тот же JSON. Журнал входит в `inputs`, поэтому новый smoke-вызов меняет его хэш.
