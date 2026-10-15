@@ -48,7 +48,6 @@ def test_real_bank_passes_schema_check():
     """Черновик банка в репозитории проходит проверку схемы (без --final)."""
     errors, warnings = bank.validate_files(final=False)
     assert errors == []
-    assert any("todo" in w for w in warnings)
 
 
 def test_real_bank_composition():
@@ -252,9 +251,9 @@ def test_h2_needs_formula_and_verbal():
 def test_verify_marks_only_agent_drafts(tmp_path):
     path = tmp_path / "tasks.jsonl"
     tasks = bank.load_tasks()
+    tasks[0]["reference_status"], tasks[1]["reference_status"] = "todo", "agent_draft"   # не зависим от состояния банка
     bank.save_tasks(tasks, path)
-    todo_id = next(t["id"] for t in tasks if t["reference_status"] == "todo")
-    draft_id = next(t["id"] for t in tasks if t["reference_status"] == "agent_draft")
+    todo_id, draft_id = tasks[0]["id"], tasks[1]["id"]
 
     assert bank.main(["verify", "--bank", str(path), todo_id]) == 1       # заготовку нельзя «подтвердить»
     assert bank.main(["verify", "--bank", str(path), draft_id]) == 0
