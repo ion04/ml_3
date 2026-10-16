@@ -401,8 +401,38 @@ def doc_compliance():
     return "01_сверка_с_заданием", "Сверка с заданием ЛР3", md(strip_h1(read_text("docs/compliance_check.md")))
 
 
-DOCS = {"01": doc_compliance, "02": doc_bank, "03": doc_hypotheses, "04": doc_models, "05": doc_typeE,
-        "06": doc_instructions, "07": doc_sheet, "08": doc_spotcheck, "09": doc_pricing, "10": doc_todo, "11": doc_report}
+def doc_guide():
+    return "00_как_проверить_вручную", "Как проверить всё самостоятельно", md(strip_h1(read_text("docs/manual_check_guide.md")))
+
+
+def doc_answers_af():
+    """Ответы моделей на A и F основного прогона рядом с вердиктом автопроверки.
+    B, C, D сюда не попадают: их проверяют вслепую, названия моделей рядом с ними видеть нельзя."""
+    tasks = {t["id"]: t for t in read_jsonl("data/tasks.jsonl")}
+    rows = [r for r in read_jsonl("results/main_ru.jsonl") if r["type"] in ("A", "F")]
+    order = [t for t in tasks if tasks[t]["type"] in ("A", "F")]
+    cards = []
+    for tid in order:
+        t = tasks[tid]
+        lines = []
+        for r in sorted((r for r in rows if r["task_id"] == tid), key=lambda r: r["model_key"]):
+            fmt = "" if r["parse_ok"] else " <b>(формат не соблюдён, ответ найден эвристикой)</b>"
+            verdict = "✅ верно" if r["correct"] else "❌ неверно"
+            lines.append(f"<h4>{esc(r['model_key'])} — {verdict}{fmt}</h4>"
+                         + table(["строка ОТВЕТ", "распознано", "уверенность", "причина вердикта"],
+                                 [[esc(r["raw_answer_line"] or "—"), esc(r["value"]), esc(r["confidence"]), esc(r["reason"])]])
+                         + f"<div class='lbl'>Конец ответа модели:</div>{pre((r['response_text'] or '')[-700:])}")
+        cards.append(f"<div class='card long'><h3>{esc(tid)}</h3><div>{esc(t['text_ru'])}</div>"
+                     f"<div class='ref'><span class='lbl'>Эталон:</span> {fmt_reference(t)}</div>{''.join(lines)}"
+                     "<div class='check'>☐ Все вердикты автопроверки верны &nbsp; ☐ Есть замечание: ______________________</div></div>")
+    body = ("<div class='note'>Основной прогон, задачи A и F. Проверьте, что вердикт автопроверки верен: число совпадает с эталоном "
+            "в пределах допуска (обычно ±1%), для F6–F8 верен только ответ «нельзя определить». Ответы на B, C и D сюда не включены — "
+            "их вы оцениваете вслепую.</div>" + "".join(cards))
+    return "12_ответы_A_F_и_автопроверка", "Ответы моделей на A и F и вердикты автопроверки", body
+
+
+DOCS = {"00": doc_guide, "01": doc_compliance, "02": doc_bank, "03": doc_hypotheses, "04": doc_models, "05": doc_typeE,
+        "06": doc_instructions, "07": doc_sheet, "08": doc_spotcheck, "09": doc_pricing, "10": doc_todo, "11": doc_report, "12": doc_answers_af}
 
 
 def main(argv=None) -> int:
