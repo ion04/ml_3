@@ -1,8 +1,8 @@
 {
   "_comment": "Тарифы для расчёта ₽ за правильный ответ (шаг 10). Цена = tokens_in · rub_per_1m_in / 1e6 + tokens_out · rub_per_1m_out / 1e6. Собрано агентом по официальным страницам; числа сверяет человек и ставит verified_by_human: true (HUMAN_TODO, G2). Цены в рублях российских провайдеров включают НДС; цены DeepSeek в USD без НДС, переведены по курсу ЦБ (usd_rub).",
-  "verified_by_human": false,
-  "date_checked": "2026-10-10",
-  "checked_by": "агент, шаг 10 (WebSearch/WebFetch официальных страниц)",
+  "verified_by_human": true,
+  "date_checked": "2026-10-25",
+  "checked_by": "человек, G2 (ручная сверка с официальными страницами)",
   "unit": "RUB за 1 млн токенов",
   "usd_rub": {
     "rate": 84.9048,
@@ -21,7 +21,7 @@
       },
       "source_url": "https://developers.sber.ru/docs/ru/gigachat/tariffs/individual-tariffs",
       "source_url_alt": "https://developers.sber.ru/docs/ru/gigachat/tariffs/legal-tariffs",
-      "date_checked": "2026-10-10",
+      "date_checked": "2026-10-25",
       "note": "Для физлиц (scope GIGACHAT_API_PERS) оплаты за токен нет: Freemium (25 млн токенов Max на 12 мес., один поток) или пакеты. Взята цена пакета на 1 млн = цене юрлиц за токен (вход и выход не различаются). С 01.09.2026 новые клиенты платят через cloud.ru: GigaChat-2-Max 569,3374 ₽ за 1 млн вход и выход с НДС 22% (https://cdn.cloud.ru/docs/legal/tariffs/evolution/future-version/foundation-models.pdf, «версия 260915»). Какую цену брать в отчёт — решает человек."
     },
     "gigachat-2-lite": {
@@ -34,7 +34,7 @@
       },
       "source_url": "https://developers.sber.ru/docs/ru/gigachat/tariffs/individual-tariffs",
       "source_url_alt": "https://developers.sber.ru/docs/ru/gigachat/tariffs/legal-tariffs",
-      "date_checked": "2026-10-10",
+      "date_checked": "2026-10-25",
       "note": "Модель выключена в config/models.json (альтернатива)."
     },
     "gigachat-3-ultra": {
@@ -46,7 +46,7 @@
         "price": "на developers.sber.ru платного тарифа нет, только Freemium (50 млн токенов для физлиц)"
       },
       "source_url": "https://developers.sber.ru/docs/ru/gigachat/tariffs/individual-tariffs",
-      "date_checked": "2026-10-10",
+      "date_checked": "2026-10-25",
       "note": "Модель выключена. На cloud.ru «GigaChat Ultra» 96,2214 ₽ вход / 288,6032 ₽ выход за 1 млн с НДС, но соответствие API-модели GigaChat-3-Ultra не подтверждено — если включите модель, подтвердите цену."
     },
     "yandexgpt-pro-5.1": {
@@ -58,7 +58,7 @@
         "price": "YandexGPT Pro 5.1, синхронный режим: 0,8 ₽ за 1000 входящих и 0,8 ₽ за 1000 исходящих токенов, вкл. НДС"
       },
       "source_url": "https://aistudio.yandex.ru/docs/ru/ai-studio/pricing",
-      "date_checked": "2026-10-10",
+      "date_checked": "2026-10-25",
       "note": "Асинхронный режим 0,41 ₽ за 1000 (не используется). Страница отдаёт капчу скриптам — числа прочитаны через WebFetch дважды, проверьте в браузере."
     },
     "aliceai-llm": {
@@ -70,7 +70,7 @@
         "price": "Alice AI LLM, синхронный: 0,5 ₽ за 1000 входящих, 1,2 ₽ за 1000 исходящих, вкл. НДС"
       },
       "source_url": "https://aistudio.yandex.ru/docs/ru/ai-studio/pricing",
-      "date_checked": "2026-10-10",
+      "date_checked": "2026-10-25",
       "note": "Модель выключена (альтернатива)."
     },
     "deepseek-v4-pro": {
@@ -90,7 +90,7 @@
         }
       },
       "source_url": "https://api-docs.deepseek.com/quick_start/pricing",
-      "date_checked": "2026-10-10",
+      "date_checked": "2026-10-25",
       "note": "Взята цена в часы пик и без кэша (верхняя оценка): время вызова может попасть в любой период; с 14.10.2026 журнал хранит tokens_cached (prompt_cache_hit_tokens, у DeepSeek они уже входят в tokens_in), так что при желании человек может посчитать и цену с кэшем. Вне пика цена вдвое ниже (пик: 01:00–04:00 и 06:00–10:00 UTC, пн–пт, кроме праздников КНР). Цена в USD без НДС."
     },
     "deepseek-flash": {
@@ -110,7 +110,7 @@
         }
       },
       "source_url": "https://api-docs.deepseek.com/quick_start/pricing",
-      "date_checked": "2026-10-10",
+      "date_checked": "2026-10-25",
       "note": "Модель выключена (альтернатива). Те же правила пика, что у deepseek-v4-pro."
     },
     "qwen3-8b": {
@@ -123,7 +123,7 @@
         "price": "локальная модель (Ollama на ПК gpu), оплаты за токены нет"
       },
       "source_url": null,
-      "date_checked": "2026-10-10",
+      "date_checked": "2026-10-25",
       "note": "Вместо цены — время и память: latency_s в журнале, память модели local_vram_mb / local_model_size_mb из журнала (/api/ps Ollama), железо — results/run_manifest.json → ollama_server. Электроэнергию не считаем."
     },
     "qwen3-8b-think": {
@@ -136,7 +136,7 @@
         "price": "локальная модель, оплаты за токены нет"
       },
       "source_url": null,
-      "date_checked": "2026-10-10",
+      "date_checked": "2026-10-25",
       "note": "Как qwen3-8b (только для H6)."
     }
   }
