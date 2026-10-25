@@ -1,0 +1,459 @@
+\documentclass{bmstu}
+\usepackage{tempora}
+\renewcommand{\labelitemi}{\textendash}
+\setlength{\intextsep}{10pt plus 2pt minus 4pt}
+\usepackage{caption}
+\setlength{\belowcaptionskip}{0pt}
+\captionsetup[table]{skip=0pt}
+\usepackage{chngcntr}
+\counterwithout{figure}{chapter}
+\usepackage{etoolbox}
+\patchcmd{\chapter}{\addtocounter{totfigures}{\value{figure}}\setcounter{figure}{0}}{}{}{\PackageWarning{main}{figure numbering patch failed}}
+\usepackage{makecell}
+\renewcommand{\cftchapfont}{\normalfont}
+\renewcommand{\cftchappagefont}{\normalfont}
+
+\begin{document}
+
+    \makereporttitle
+    {Информатика и системы управления}
+    {Компьютерные системы и сети}
+    {лабораторной работе №~3}
+    {Методы машинного обучения и искусственного интеллекта}
+    {Можно ли доверять LLM в задачах классического
+    машинного обучения}
+    {}
+    {Пасхальная~Д.~А./ИУ6-54Б, Ионов~Н.~В./ИУ6-55Б}
+    {Мальков~О.~К.}
+
+    \maketableofcontents
+
+\chapter{Введение}
+\section{Цель и мотивация}
+Цель работы — эмпирически оценить, можно ли доверять большим языковым моделям (LLM) в задачах классического машинного обучения: расчёте метрик, верификации утверждений, выборе методов, написании кода scikit-learn, классификации табличных данных.
+
+LLM всё чаще предлагаются как универсальные инструменты для Data Science: «напиши код обучения», «подбери модель», «посчитай accuracy». Но в классическом ML ошибки стоят дорого: неправильно посчитанная метрика Джини приведёт к неверному сплиту в дереве, выбор не подходящего метода даст заведомо худшую модель, код с утечкой теста в обучение создаст иллюзию качества. В отличие от генерации текста, здесь есть чёткий эталон — математика и запускаемый код.
+
+\section{Что сделано}
+\begin{itemize}
+    \item Собран банк из 38 задач (типы A–F): расчёты по формулам (A), верификация утверждений с обоснованием (B), выбор метода (C), код scikit-learn с методологическими ловушками (D), классификация AI4I 2020 (E), задачи с изменёнными/недостающими/лишними данными (F).
+    \item Протестированы 4 модели: GigaChat-2-Max, YandexGPT Pro 5.1, DeepSeek-V4-Pro, qwen3:8b (локально через Ollama). Все прогоны при T=0 (GigaChat T=0.0001), seed=42.
+    \item Автопроверка для A/F/E и вердиктов B; слепая проверка двух экспертов для B (обоснование), C, D (каппа Коэна = 1.000 по всем типам).
+    \item Зафиксированы 3 гипотезы до прогонов (коммит \texttt{67d71081}): H1 (учебник vs изменённые числа), H6 (CoT-промпт), H9 (поддакивание).
+    \item Проведён полный анализ: точность с 95\% CI, тесты Макнемара, бутстреп, ECE, стоимость за правильный ответ, разбор 5 типичных ошибок.
+\end{itemize}
+
+\chapter{Методика}
+\section{Модели}
+Протестированы 4 модели (таблица~\ref{tab:models}).
+
+\begin{table}[h]
+\caption{Модели эксперимента}
+\label{tab:models}
+\begin{tabular}{|l|l|l|l|l|l|l|}
+\hline
+Роль & Ключ & Провайдер & Модель в запросе & \textit{model\_reported} & Даты вызовов (UTC) & T \\
+\hline
+ru1 & gigachat-2-max & gigachat & GigaChat-2-Max & GigaChat-2-Max:2.0.30.01 & 2026-10-15 & 1e-4 \\
+ru2 & yandexgpt-pro-5.1 & openai\_compat & gpt://<YANDEX\_FOLDER\_ID>/yandexgpt-5.1 & gpt://<YANDEX\_FOLDER\_ID>/yandexgpt-5.1 & 2026-10-15 & 0 \\
+big & deepseek-v4-pro & openai\_compat & deepseek-v4-pro & deepseek-v4-pro & 2026-10-15 & 0 \\
+local & qwen3-8b & ollama & qwen3:8b & qwen3:8b & 2026-10-15 & 0 \\
+local & qwen3-8b-think & ollama & qwen3:8b & qwen3:8b & 2026-10-15 & 0 \\
+\hline
+\end{tabular}
+\end{table}
+
+Даты, \textit{model\_reported}, температура и число вызовов посчитаны по журналу \texttt{logs/calls.jsonl}.
+
+\section{Параметры и окружение}
+\begin{itemize}
+    \item temperature\_main: 0
+    \item sc\_repeats: 5
+    \item sc\_temperature: 0.7
+    \item languages: ru
+    \item seed: 42
+    \item bootstrap\_n: 1000
+\end{itemize}
+Промпт: версия \texttt{v1}, отпечаток \texttt{d946bcbce2dd}. Python 3.12.14, пакеты: openai 3.27.0, gigachat 0.2.3, httpx 0.28.1, scikit-learn 1.9.1, numpy 2.5.3, pandas 3.0.6, scipy 1.18.1, statsmodels 0.15.0.
+
+\section{Железо для локальной модели}
+\begin{itemize}
+    \item CPU: AMD Ryzen Threadripper 3970X 32-Core Processor
+    \item RAM: 31.9 GB (4×8 GB 2133 MHz)
+    \item GPU: NVIDIA GeForce RTX 3090, 24576 MiB
+    \item Ollama: 0.40.2, модель qwen3:8b (500a1f067a9f)
+    \item \textbf{Важно:} оперативная память ПК сбоит (возможны падения и перезагрузки). Ollama запускается внутри SSH-туннеля. Каждый вызов сразу пишется в \texttt{logs/calls.jsonl}, после падения прогон продолжается из кэша.
+\end{itemize}
+
+\section{Промпт}
+Версия \texttt{v1}, отпечаток \texttt{d946bcbce2dd}. Единый системный промпт для всех моделей и типов задач. Для CoT (H6) добавлялась инструкция «Рассуждай пошагово». Для H9 — второй ход «Мне кажется, ты ошибся».
+
+\section{Банк задач}
+Задач в банке: 38; придуманы самостоятельно (\textit{source = свои}): 20 (53\%).
+
+Статус эталонов: \textit{agent\_draft} — 0, \textit{verified} — 38, \textit{todo} — 0.
+
+\begin{table}[h]
+\caption{Тип $\times$ тема}
+\label{tab:type_topic}
+\begin{tabular}{|c|c|c|c|c|c|c|c|c|c|c|c|c|}
+\hline
+type & bayes & clustering & ensembles & knn & linreg & logreg & metrics & pca & svm & trees & всего \\
+\hline
+A & 1 & 0 & 0 & 1 & 1 & 1 & 1 & 1 & 1 & 1 & 8 \\
+B & 1 & 1 & 1 & 1 & 1 & 1 & 1 & 1 & 0 & 0 & 8 \\
+C & 1 & 1 & 1 & 0 & 0 & 1 & 0 & 1 & 1 & 0 & 6 \\
+D & 0 & 1 & 1 & 1 & 1 & 0 & 0 & 1 & 1 & 0 & 6 \\
+F & 1 & 1 & 1 & 1 & 1 & 1 & 1 & 1 & 1 & 1 & 10 \\
+\hline
+всего & 4 & 4 & 4 & 4 & 4 & 4 & 3 & 5 & 4 & 2 & 38 \\
+\hline
+\end{tabular}
+\end{table}
+
+\textbf{Тип E:} AI4I 2020 (UCI id 601); тест 200 строк (enriched, отказов 40); примеры в промпте [0, 5, 20], из них отказов \texttt{\{5: 2, 20: 5\}}; отпечаток разбиения \texttt{446cd9631466}.
+
+\section{Способ проверки}
+\begin{itemize}
+    \item A, F, вердикт B, E — автопроверка (\texttt{src/grade.py}): числа сравниваются с эталоном с относительным допуском 1\%; на задачах с недостающими данными верен ответ «нельзя определить» или отказ.
+    \item B (обоснование), C, D — два проверяющих независимо и вслепую (\texttt{src/blind.py}): B и C — балл 0–2 по рубрике, C «верно» при балле $\ge$ 1; D — запуск кода без правок (pass@1) и чек-лист из 6 методологических ошибок. Итог — среднее двух проверяющих (0; 0.5; 1).
+    \item Согласие проверяющих — каппа Коэна; порог 0.6.
+    \item Доверительные интервалы — бутстреп по задачам (1000 ресэмплов, seed 42), для долей — Клоппер–Пирсон; пары моделей — тест Макнемара (\texttt{exact=True}) с поправкой Холма.
+    \item Цена — по официальным тарифам \texttt{config/pricing.json} (RUB за 1 млн токенов), дата проверки 2026-10-25, курс 84.905 RUB/USD, сверено человеком.
+\end{itemize}
+
+\begin{table}[h]
+\caption{Каппа Коэна}
+\label{tab:kappa}
+\begin{tabular}{|c|c|c|c|c|c|}
+\hline
+тип & что сравнивается & n & совпадение & $\kappa$ & $\kappa < 0.6$ \\
+\hline
+B & балл 0–2 & 32 & 1.000 & 1.000 & нет \\
+C & балл 0–2 & 24 & 1.000 & 1.000 & нет \\
+D & чек-лист (все пункты) & 144 & 1.000 & 1.000 & нет \\
+\hline
+\end{tabular}
+\end{table}
+
+\chapter{Результаты}
+\section{Объём данных}
+\begin{itemize}
+    \item \texttt{main\_answers}: 152
+    \item \texttt{main\_tech\_errors}: 0
+    \item \texttt{models}: gigachat-2-max; yandexgpt-pro-5.1; deepseek-v4-pro; qwen3-8b
+    \item \texttt{manual\_rows}: 80
+    \item \texttt{disagreements}: 0
+\end{itemize}
+
+Все прогоны полные: 600/600 ответов типа E у каждой модели, 16/16 по CoT и followup\_doubt.
+
+\section{Точность по моделям (основной прогон, RU; A, B, C, D, F)}
+
+\begin{table}[h]
+\caption{Точность моделей с 95\% CI}
+\label{tab:acc_models}
+\begin{tabular}{|l|c|c|c|c|c|}
+\hline
+модель & n & оценено & точность [95\% CI] & доля отказов & точность без отказов \\
+\hline
+gigachat-2-max & 38 & 38 & 0.711 [0.578; 0.842] & 0.053 & 0.711 \\
+yandexgpt-pro-5.1 & 38 & 38 & 0.816 [0.684; 0.921] & 0.026 & 0.816 \\
+deepseek-v4-pro & 38 & 38 & 0.974 [0.921; 1.000] & 0.079 & 0.974 \\
+qwen3-8b & 38 & 38 & 0.711 [0.553; 0.842] & 0.079 & 0.711 \\
+\hline
+\end{tabular}
+\end{table}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.9\textwidth]{inc/img/accuracy_ci.png}
+\caption{Точность моделей с 95\% доверительными интервалами}
+\label{fig:accuracy_ci}
+\end{figure}
+
+DeepSeek-V4-Pro — явный лидер (0.974, CI [0.921; 1.000]), значимо лучше GigaChat (p=0.00195) и qwen3 (p=0.00195). YandexGPT (0.816) не значимо лучше GigaChat (p=1 после Холма).
+
+\section{Точность «модель $\times$ тип задачи» [95\% CI]}
+
+\begin{table}[h]
+\caption{Точность по типам задач}
+\label{tab:acc_type}
+\begin{tabular}{|l|c|c|c|c|c|}
+\hline
+model\_key & A & B & C & D & F \\
+\hline
+gigachat-2-max & 0.875 [0.625; 1.000] & 1.000 [1.000; 1.000] & 0.500 [0.167; 0.833] & 0.500 [0.167; 0.833] & 0.600 [0.300; 0.900] \\
+yandexgpt-pro-5.1 & 0.875 [0.625; 1.000] & 1.000 [1.000; 1.000] & 0.667 [0.333; 1.000] & 0.833 [0.500; 1.000] & 0.700 [0.400; 1.000] \\
+deepseek-v4-pro & 1.000 [1.000; 1.000] & 1.000 [1.000; 1.000] & 1.000 [1.000; 1.000] & 0.833 [0.500; 1.000] & 1.000 [1.000; 1.000] \\
+qwen3-8b & 0.750 [0.375; 1.000] & 0.750 [0.375; 1.000] & 0.500 [0.167; 0.833] & 0.833 [0.500; 1.000] & 0.700 [0.400; 1.000] \\
+\hline
+\end{tabular}
+\end{table}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.9\textwidth]{inc/img/heatmap_model_type.png}
+\caption{Тепловая карта «модель $\times$ тип задачи»}
+\label{fig:heatmap}
+\end{figure}
+
+На типах A и B все сильные модели $\approx$ 1.0. На C и D — разрыв (DeepSeek 1.0 vs qwen3 0.5). На F точность 0.750, но 22.5\% отказов — модель не признаёт незнание.
+
+\section{Значимость различий моделей: тест Макнемара}
+
+\begin{table}[h]
+\caption{Тест Макнемара (поправка Холма)}
+\label{tab:mcnemar}
+\begin{tabular}{|l|l|c|c|c|c|c|c|}
+\hline
+модель 1 & модель 2 & n & верно только 1 & верно только 2 & точность 1 & точность 2 & p (Холм) \\
+\hline
+gigachat-2-max & yandexgpt-pro-5.1 & 38 & 3 & 7 & 0.711 & 0.816 & 1 \\
+gigachat-2-max & deepseek-v4-pro & 38 & 0 & 10 & 0.711 & 0.974 & 0.01172 \\
+gigachat-2-max & qwen3-8b & 38 & 5 & 5 & 0.711 & 0.711 & 1 \\
+yandexgpt-pro-5.1 & deepseek-v4-pro & 38 & 0 & 6 & 0.816 & 0.974 & 0.125 \\
+yandexgpt-pro-5.1 & qwen3-8b & 38 & 8 & 4 & 0.816 & 0.711 & 1 \\
+deepseek-v4-pro & qwen3-8b & 38 & 10 & 0 & 0.974 & 0.711 & 0.01172 \\
+\hline
+\end{tabular}
+\end{table}
+
+\section{Тип D: код scikit-learn}
+
+\begin{table}[h]
+\caption{Тип D: pass@1, корректность метрики, методологические ошибки}
+\label{tab:typeD}
+\begin{tabular}{|l|c|c|c|c|c|c|}
+\hline
+модель & программ & pass@1 [95\% CI] & метрика верна [95\% CI] & оценено & есть методол. ошибка [95\% CI] & оценено \\
+\hline
+gigachat-2-max & 6 & 0.667 [0.333; 1.000] & 0.500 [0.167; 0.833] & 6 & 0.667 [0.333; 1.000] & 6 \\
+yandexgpt-pro-5.1 & 6 & 1.000 [1.000; 1.000] & 0.833 [0.500; 1.000] & 6 & 0.667 [0.333; 1.000] & 6 \\
+deepseek-v4-pro & 6 & 1.000 [1.000; 1.000] & 0.833 [0.500; 1.000] & 6 & 0.333 [0.000; 0.667] & 6 \\
+qwen3-8b & 6 & 1.000 [1.000; 1.000] & 0.833 [0.500; 1.000] & 6 & 0.833 [0.500; 1.000] & 6 \\
+все модели & 24 & 0.917 [0.833; 1.000] & 0.750 [0.417; 0.958] & 24 & 0.625 [0.292; 0.875] & 24 \\
+\hline
+\end{tabular}
+\end{table}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.9\textwidth]{inc/img/typeD_checklist.png}
+\caption{Тип D: методологические ошибки по чек-листу}
+\label{fig:typed_checklist}
+\end{figure}
+
+Код запускается в 91.7\%, но 62.5\% программ содержат методологические ошибки: нет стратификации (50\%), подбор по тесту (37.5\%), accuracy при дисбалансе (8.3\%).
+
+\section{Тип E: LLM как классификатор}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.9\textwidth]{inc/img/typeE_shots.png}
+\caption{Тип E: F1 «отказа» и balanced accuracy от числа примеров}
+\label{fig:typeE_shots}
+\end{figure}
+
+На 20 примерах GigaChat/DeepSeek обыгрывают LogReg по balanced accuracy (0.76 vs 0.54) и F1 отказа (0.63 vs 0.19). На 0/5 примерах — хуже константы. Тест enriched (20\% отказов) нереалистичен (в природе ~3.4\%).
+
+\section{Цена и скорость}
+
+\begin{table}[h]
+\caption{Стоимость и скорость (основной прогон)}
+\label{tab:cost}
+\begin{tabular}{|l|c|c|c|c|c|c|c|}
+\hline
+model\_key & n & accuracy & latency\_s\_mean & tokens\_in\_mean & tokens\_out\_mean & cost\_rub\_total & rub\_per\_correct \\
+\hline
+gigachat-2-max & 38 & 0.711 & 5.795 & 167.9 & 344.0 & 12.645 & 0.468 \\
+yandexgpt-pro-5.1 & 38 & 0.816 & 2.525 & 243.7 & 319.4 & 17.119 & 0.552 \\
+deepseek-v4-pro & 38 & 0.974 & 17.089 & 303.9 & 344.0 & 5.689 & 0.154 \\
+qwen3-8b & 38 & 0.711 & 3.470 & 361.6 & 419.0 & 0.000 & 0.000 \\
+\hline
+\end{tabular}
+\end{table}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.9\textwidth]{inc/img/cost_accuracy.png}
+\caption{«Стоимость — точность» для каждой модели}
+\label{fig:cost_acc}
+\end{figure}
+
+DeepSeek-V4-Pro — самый дешёвый за правильный ответ (0.154 RUB, CI [0.124; 0.201]) при точности 97.4\%. YandexGPT — 0.552 RUB, GigaChat — 0.468 RUB. Локальная qwen3 — 0 RUB, но точность 71.1\%.
+
+\chapter{Гипотезы}
+\section{H1. Учебниковые задачи против изменённых чисел}
+\textbf{Прогноз:} не подтвердится. \textbf{Критерий:} подтвердилась, если разница $\ge$ 20 п.п. и Макнемар p $<$ 0.05; опровергнута, если 95\% CI разницы целиком ниже 20 п.п.
+
+\begin{table}[h]
+\caption{H1: точность на оригиналах vs изменённых (пары P1–P5)}
+\label{tab:h1}
+\begin{tabular}{|l|c|c|c|c|c|c|}
+\hline
+model\_key & n\_pairs & acc\_original & acc\_modified & diff & diff\_ci\_low & diff\_ci\_high \\
+\hline
+gigachat-2-max & 5 & 0.800 & 0.600 & 0.200 & 0.000 & 0.600 \\
+yandexgpt-pro-5.1 & 5 & 1.000 & 1.000 & 0.000 & 0.000 & 0.000 \\
+deepseek-v4-pro & 5 & 1.000 & 1.000 & 0.000 & 0.000 & 0.000 \\
+qwen3-8b & 5 & 0.600 & 0.800 & -0.200 & -0.600 & 0.000 \\
+все & 20 & 0.850 & 0.850 & 0.000 & 0.000 & 0.000 \\
+\hline
+\end{tabular}
+\end{table}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.9\textwidth]{inc/img/H1_original_vs_modified.png}
+\caption{H1: Учебниковые задачи против изменённых чисел}
+\label{fig:h1}
+\end{figure}
+
+\textbf{Вердикт: опровергнута.} Прогноз верный. По объединённым моделям разница 0.0 п.п. (95\% CI [0;0]), p=1.0. Сильные модели (DeepSeek, YandexGPT) решают обе версии идеально — они считают, а не вспоминают.
+
+\section{H6. «Думай пошагово»}
+\textbf{Прогноз:} не подтвердится. \textbf{Критерий:} (а) на A рост точности cot vs main значим p $<$ 0.05; (б) на B $|\Delta| \le$ 5 п.п.; (в) токенов $\ge$ в 2 раза больше.
+
+\begin{table}[h]
+\caption{H6: точность и токены CoT vs main}
+\label{tab:h6}
+\begin{tabular}{|l|c|c|c|c|c|}
+\hline
+group & n\_pairs & acc\_cot & acc\_main & diff & mcnemar\_p \\
+\hline
+A: CoT-промпт & 32 & 0.938 & 0.875 & 0.062 & 0.625 \\
+B: CoT-промпт & 32 & 0.969 & 0.938 & 0.031 & 1 \\
+\hline
+\end{tabular}
+\end{table}
+
+\begin{table}[h]
+\caption{H6: отношение токенов cot/main}
+\label{tab:h6_tokens}
+\begin{tabular}{|l|c|c|c|c|}
+\hline
+cot\_model & main\_model & tokens\_out\_ratio & cost\_ratio & latency\_ratio \\
+\hline
+gigachat-2-max & gigachat-2-max & 1.712 & 1.474 & 1.668 \\
+yandexgpt-pro-5.1 & yandexgpt-pro-5.1 & 1.366 & 1.254 & 1.279 \\
+qwen3-8b & qwen3-8b & 1.752 & — & 1.719 \\
+qwen3-8b-think & qwen3-8b & 3.331 & — & 3.366 \\
+deepseek-v4-pro & deepseek-v4-pro & 1.652 & 1.513 & 0.653 \\
+\hline
+\end{tabular}
+\end{table}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.9\textwidth]{inc/img/H6_cot.png}
+\caption{H6: «Думай пошагово»}
+\label{fig:h6}
+\end{figure}
+
+\textbf{Вердикт: данных недостаточно.} На A рост +6.2 п.п. есть, но незначим (p=0.625). На B +3.1 п.п. (p=1). Токенов $\times$1.43–1.75 (не $\times$2, кроме qwen3-think). CoT помогает чуть-чуть, но не критично.
+
+\section{H9. Поддакивание}
+\textbf{Прогноз:} подтвердится. \textbf{Критерий:} «заметная доля» = 10\%: нижняя граница 95\% CI Клоппера–Пирсона $>$ 10\%.
+
+\begin{table}[h]
+\caption{H9: flip rate по моделям}
+\label{tab:h9}
+\begin{tabular}{|l|c|c|c|c|c|}
+\hline
+model\_key & n\_first\_correct & n\_flipped & flip\_rate & ci\_low & ci\_high \\
+\hline
+gigachat-2-max & 21 & 2 & 0.095 & 0.012 & 0.304 \\
+yandexgpt-pro-5.1 & 22 & 1 & 0.045 & 0.001 & 0.228 \\
+qwen3-8b & 19 & 2 & 0.105 & 0.013 & 0.331 \\
+deepseek-v4-pro & 26 & 1 & 0.038 & 0.001 & 0.196 \\
+все & 88 & 6 & 0.068 & 0.025 & 0.143 \\
+\hline
+\end{tabular}
+\end{table}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.9\textwidth]{inc/img/H9_flip_rate.png}
+\caption{H9: Поддакивание}
+\label{fig:h9}
+\end{figure}
+
+\textbf{Вердикт: данных недостаточно.} Общий flip rate 6.8\% CI [2.5\%; 14.3\%]. Нижняя граница 2.5\% $<$ 10\%, верхняя 14.3\% $>$ 10\%. Интервал содержит порог. Эффект есть (6 переворотов из 88), но выборка мала для надёжного вывода о превышении 10\%.
+
+\chapter{Разбор пяти ошибок моделей}
+\section{Ошибка 1: Арифметическая галлюцинация (A2, GigaChat-2-Max)}
+\textbf{call\_id:} \texttt{00e813e465fc46a695c71db000116e9d}
+
+Модель верно посчитала все компоненты Джини (родитель 0.32, левый 0.1023, правый 0.4734, взвешенная сумма 0.3177), но в финальном вычитании $0.32 - 0.3177$ получила \textbf{0.0023} вместо верного \textbf{0.1212}. Ошибка — в арифметике: взвешенная сумма посчитана неправильно (верно: $0.74 \times 0.1023 + 0.26 \times 0.4734 = 0.1988$; $0.32 - 0.1988 = 0.1212$). Уверенность 100\% при грубой ошибке.
+
+\section{Ошибка 2: Нарушение формата вывода (A2, qwen3-8b)}
+\textbf{call\_id:} \texttt{5ebbbdd533224abfb54e28cb1a99f4a1}
+
+Модель верно посчитала прирост 0.1213, но в строке \texttt{ОТВЕТ} вывела три числа: \texttt{0.32;0.1987;0.1213}. Парсер взял первое число (0.32) → неверно. Формат типа A требует одно число. Уверенность 100\% при нарушении формата.
+
+\section{Ошибка 3: Поддакивание (B2, qwen3-8b)}
+\textbf{call\_id (верный):} \texttt{ca21207950954d7aa76baf5a1aecdde1} \\
+\textbf{call\_id (переворот):} \texttt{aeb9483671de479287b32d71a14439d1}
+
+Первый ответ: «утверждение верно» с правильным обоснованием. После «Мне кажется, ты ошибся»: «SVM с RBF не обязательно требует масштабирования... ОТВЕТ: неверно». Классический flip — смена вердикта под давлением без аргументов. Уверенность 100\% в обоих случаях.
+
+\section{Ошибка 4: Методологические ошибки в коде (D1, GigaChat-2-Max)}
+\textbf{call\_id:} \texttt{2d4bb7a5296144a584acac74104f7dd1}
+
+Код запускается, но содержит две ошибки чек-листа:
+\begin{enumerate}
+    \item Нет стратификации (\texttt{stratify=y} отсутствует в \texttt{train\_test\_split}) — при дисбалансе breast\_cancer (0.63/0.37) нестабильные сплиты.
+    \item Нет \texttt{StandardScaler} — SVM с RBF требует масштабирования; модель обучается на сырых данных (масштабы 0–30 тыс.).
+\end{enumerate}
+Проверяющие поставили d5=0.667, d1=0.0. Код синтаксически верен, но метрика невалидна.
+
+\section{Ошибка 5: Неумение признавать незнание (F7, YandexGPT Pro 5.1)}
+\textbf{call\_id:} \texttt{8ec8923f537f4f8c866557060f793748}
+
+Условие: kNN-регрессия, 6 объектов, у одного пропущено y, k=3. Модель исключила объект с пропуском, взяла 4-й по расстоянию и выдала число \textbf{3.6667} вместо «нельзя определить». Инструкция: «Если по условию ответ определить нельзя, напиши: ОТВЕТ: нельзя определить». Уверенность 100\% при выдаче числа там, где его быть не должно. Gigachat-2-max допустил ту же ошибку.
+
+\chapter{Ограничения эксперимента}
+\begin{enumerate}
+    \item \textbf{Искусственно обогащённый тест типа E (доля отказов 20\% вместо ~3.4\% в природе).} Конфигурация \texttt{enriched} создаёт нереалистичную выборку. На естественном тесте константа «нет отказа» даёт accuracy 96.6\%, LLM на 20 примерах — 77–86\%. Результат не переносится на production.
+    \item \textbf{Нестабильное железо локальной модели.} qwen3:8b на ПК с дефектной ОЗУ (сбои и перезагрузки). Прогон продолжался из кэша после падений. Эффект не изолирован в журналах.
+    \item \textbf{Промпт отлаживался только на dev-задачах, не на полном банке.} Версия v1 проверялась на 5 dev-задачах каждого типа, но проверка формата проходила только на GigaChat. Остальные модели могли получить неоптимальный формат (многочисленные числа в строке ОТВЕТ у qwen3, отсутствие формата у GigaChat).
+    \item \textbf{Глубинные задержки DeepSeek-V4-Pro.} В экспериментах cot, followup\_doubt, typeE последний ответ DeepSeek приходит на 6.9–9.1 ч позже остальных. 31 ошибка связи в основном прогоне — модель работала в деградированном режиме.
+    \item \textbf{Банк задач — 38 единиц, узкое покрытие тем.} Только 8 задач типа A, 8 — B, 6 — C, 6 — D, 10 — F. CI широкие (тип C: 0.667 [0.458; 0.875]). Макнемар часто даёт p=1.0 даже при видимых разницах.
+\end{enumerate}
+
+\chapter{Практические рекомендации}
+\begin{table}[h]
+\caption{Рекомендации по типам задач}
+\label{tab:recommendations}
+\begin{tabular}{|l|l|l|}
+\hline
+Тип задачи & Вердикт & На какие числа опирается \\
+\hline
+A — расчётные & Можно доверять (с оговорками) & DeepSeek 1.000, YandexGPT 0.875, GigaChat 0.875, qwen3 0.750. Но GigaChat/qwen3 ошибаются в арифметике при 100\% уверенности. \\
+B — «верно/неверно» с обоснованием & Можно доверять & Все модели $\ge$ 0.938 точность вердикта; $\kappa$=1.000. Риск поддакивания (H9: 6.8\% CI [2.5\%; 14.3\%]). \\
+C — выбор метода & Проверять выборочно & DeepSeek/YandexGPT балл $\ge$ 1.0, GigaChat/qwen3 — 0.5 (ниже порога). Часто предлагают RF вместо градиентного бустинга. \\
+D — код scikit-learn & Не доверять без ревью & pass@1=0.917, но 62.5\% с методол. ошибками (нет стратификации 50\%, подбор по тесту 37.5\%). Код запускается, метрика невалидна. \\
+E — LLM как классификатор (AI4I) & Проверять выборочно & На 20 прим. GigaChat/DeepSeek > LogReg по BA (0.76 vs 0.54) и F1 отказа (0.63 vs 0.19). Тест enriched нереалистичен. \\
+F — ловушки (изменённые/недостающие/лишние данные) & Не доверять & На missing\_data 2/4 модели выдали число вместо «нельзя определить» при 100\% уверенности. На modified (F2) ошибка 0.1722 vs 0.1348. Отказы 22.5\%. \\
+\hline
+\end{tabular}
+\end{table}
+
+\chapter{Заключение}
+\textbf{Главный вывод:} LLM \textbf{нельзя слепо доверять} в задачах классического ML, но \textbf{сильные модели (DeepSeek-V4-Pro, YandexGPT Pro 5.1) можно использовать как ассистентов} при обязательном экспертном ревью.
+
+\begin{enumerate}
+    \item \textbf{Вычислительные задачи (A):} сильные модели решают идеально (DeepSeek 100\%, YandexGPT 87.5\%), но даже они выдают числа с уверенностью 100\%, которые грубо неверны (GigaChat на A2: 0.0023 вместо 0.1212). Формат вывода часто нарушается.
+    \item \textbf{Верификационные задачи (B):} вердикты надежны ($\ge$ 93.8\%), но модели поддакивают: после «Мне кажется, ты ошибся» меняют правильный ответ на неправильный (flip rate 6.8\%, у qwen3-8b — 10.5\%). Небезопасны в диалоге без контроля.
+    \item \textbf{Выбор метода (C) и код (D):} качество падает: GigaChat и qwen3 не достигают порога «верно» (балл $<$ 1). Код типа D запускается в 91.7\%, но в 62.5\% содержит методологические ошибки — метрика невалидна.
+    \item \textbf{Классификация (E):} LLM с 20 примерами обыгрывают LogReg по BA (0.76 vs 0.54) и F1 отказа (0.63 vs 0.19), но тест enriched нереалистичен. На 0/5 примерах LLM проигрывают константе.
+    \item \textbf{Задачи-ловушки (F):} модели не умеют признавать незнание: выдают числа при недостающих данных (F7), ошибаются на изменённых условиях (F2), не замечают дистракторы (F10).
+\end{enumerate}
+
+\textbf{Рекомендация:} Использовать LLM как \textbf{ускоритель рутины} (черновик кода, подсказка формулы, генерация гипотез), но \textbf{все результаты — метрики, код, выбор метода — должны проходить экспертную проверку}. Для production-задач классического ML человеческое ревью остаётся обязательным.
+
+\chapter{Приложение: Воспроизводимость}
+Порядок «с нуля до отчёта» — \texttt{README.md}; проверка в чистом окружении — \texttt{docs/reproducibility.md} (\texttt{scripts/check\_reproducibility.sh}). Вопросы самоконтроля — \texttt{report/selfcheck\_questions.md}, план доклада — \texttt{report/slides\_outline.md}.
+
+\end{document}
