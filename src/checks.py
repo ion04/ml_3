@@ -123,7 +123,7 @@ def check_hypotheses_md(text: str, selected: list[str]) -> list[str]:
 
 
 def _git(args: list[str], cwd=ROOT) -> str:
-    return subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True).stdout.strip()
+    return subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, encoding='utf-8').stdout.strip()
 
 
 def last_commit(path, cwd=ROOT) -> tuple[str, datetime] | None:
@@ -220,7 +220,7 @@ def g1() -> int:
 
     print("Гейт G1 — готовность к оценочным прогонам\n")
     for title, problems in results:
-        print(("  ✓ " if not problems else "  ✗ ") + title)
+        print(("  OK " if not problems else "  FAIL ") + title)
         for p in problems:
             print("      - " + p)
     failed = [t for t, p in results if p]
@@ -341,7 +341,7 @@ def g2(grading_dir: Path = None, pricing_path: Path = None) -> int:
 
     print("Гейт G2 — ручная проверка\n")
     for title, problems in results:
-        print(("  ✓ " if not problems else "  ✗ ") + title)
+        print(("  OK " if not problems else "  FAIL ") + title)
         for p in problems:
             print("      - " + p)
     # Совпадение двух листов во всех оценках подозрительно: проверка должна быть независимой.

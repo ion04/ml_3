@@ -451,7 +451,7 @@ def cmd_run(args) -> int:
             continue
         if status == "done" and not args.only:
             continue
-        print(f"\n▶ Шаг {step['id']}: {step['title']}" + (f" (повтор, был {status})" if status != "todo" else ""))
+        print(f"\n==> Step {step['id']}: {step['title']}" + (f" (repeat, was {status})" if status != "todo" else ""))
         launch(step, args.mode)
         status = step_status(step)
         print(f"{ICONS.get(status, '')} Шаг {step['id']}: {status}")
