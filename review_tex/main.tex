@@ -381,6 +381,125 @@ deepseek-v4-pro & 26 & 1 & 0.038 & 0.001 & 0.196 \\
 
 \textbf{Вердикт: данных недостаточно.} Общий flip rate 6.8\% CI [2.5\%; 14.3\%]. Нижняя граница 2.5\% $<$ 10\%, верхняя 14.3\% $>$ 10\%. Интервал содержит порог. Эффект есть (6 переворотов из 88), но выборка мала для надёжного вывода о превышении 10\%.
 
+\chapter{Прочие гипотезы (разведочный анализ)}
+Посчитаны ноутбуком, потому что для них нашлись данные. Не входят в три выбранные гипотезы.
+
+\section{H3. Додумывание при недостающих данных}
+\begin{table}[h]
+\caption{H3: доля выдуманных чисел}
+\label{tab:h3}
+\begin{tabular}{|l|c|c|c|c|c|}
+\hline
+model\_key & n & n\_invented\_number & share\_invented & ci\_low & ci\_high \\
+\hline
+gigachat-2-max & 3 & 1 & 0.333 & 0.008 & 0.906 \\
+yandexgpt-pro-5.1 & 3 & 2 & 0.667 & 0.094 & 0.992 \\
+deepseek-v4-pro & 3 & 0 & 0.000 & 0.000 & 0.708 \\
+qwen3-8b & 3 & 0 & 0.000 & 0.000 & 0.708 \\
+все & 12 & 3 & 0.250 & 0.055 & 0.572 \\
+\hline
+\end{tabular}
+\end{table}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.9\textwidth]{inc/img/H3_invented.png}
+\caption{H3: Додумывание при недостающих данных}
+\label{fig:h3}
+\end{figure}
+
+\section{H5. Маленькая модель: A vs B}
+\begin{table}[h]
+\caption{H5: отставание локальной модели}
+\label{tab:h5}
+\begin{tabular}{|l|l|c|}
+\hline
+type & model\_key & value \\
+\hline
+A & отставание (большие - локальная) & 0.167 \\
+A & gigachat-2-max & 0.875 \\
+A & yandexgpt-pro-5.1 & 0.875 \\
+A & deepseek-v4-pro & 1.000 \\
+B & отставание (большие - локальная) & 0.250 \\
+B & gigachat-2-max & 1.000 \\
+B & yandexgpt-pro-5.1 & 1.000 \\
+B & deepseek-v4-pro & 1.000 \\
+\hline
+\end{tabular}
+\end{table}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.9\textwidth]{inc/img/H5_gap.png}
+\caption{H5: Маленькая модель: A vs B}
+\label{fig:h5}
+\end{figure}
+
+\section{H10. Калибровка уверенности (ECE)}
+\begin{table}[h]
+\caption{H10: ECE и параметры калибровки}
+\label{tab:h10}
+\begin{tabular}{|l|c|c|c|c|c|c|c|}
+\hline
+model\_key & n & mean\_confidence & accuracy & gap & ece & ece\_ci\_low & ece\_ci\_high \\
+\hline
+gigachat-2-max & 23 & 0.991 & 0.826 & 0.165 & 0.165 & 0.030 & 0.339 \\
+yandexgpt-pro-5.1 & 26 & 0.994 & 0.846 & 0.148 & 0.148 & 0.033 & 0.294 \\
+deepseek-v4-pro & 26 & 0.992 & 1.000 & -0.008 & 0.008 & 0.002 & 0.016 \\
+qwen3-8b & 26 & 0.998 & 0.731 & 0.267 & 0.267 & 0.107 & 0.460 \\
+\hline
+\end{tabular}
+\end{table}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.9\textwidth]{inc/img/H10_reliability.png}
+\caption{H10: Калибровка уверенности (ECE, диаграмма надёжности)}
+\label{fig:h10}
+\end{figure}
+
+\section{H11. Код запускается, но методологически неверен}
+\begin{itemize}
+    \item n\_programs: 24
+    \item share\_not\_run: 0.083
+    \item share\_method\_error: 0.625
+    \item mcnemar\_p: 0.0009766
+\end{itemize}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.9\textwidth]{inc/img/H11_code_errors.png}
+\caption{H11: Код запускается, но методологически неверен}
+\label{fig:h11}
+\end{figure}
+
+\section{H12. Few-shot LLM против логистической регрессии}
+\begin{table}[h]
+\caption{H12: LLM vs LogReg на типе E}
+\label{tab:h12}
+\begin{tabular}{|l|c|c|c|c|c|c|c|}
+\hline
+model\_key & shots & ba\_llm & ba\_logreg & ba\_diff & f1\_llm & f1\_logreg & mcnemar\_p \\
+\hline
+gigachat-2-max & 5 & 0.734 & 0.572 & 0.163 & 0.556 & 0.281 & 1 \\
+yandexgpt-pro-5.1 & 5 & 0.641 & 0.572 & 0.069 & 0.433 & 0.281 & 0.1435 \\
+deepseek-v4-pro & 5 & 0.666 & 0.572 & 0.094 & 0.457 & 0.281 & 0.1996 \\
+qwen3-8b & 5 & 0.622 & 0.572 & 0.050 & 0.396 & 0.281 & 0.001299 \\
+gigachat-2-max & 20 & 0.762 & 0.541 & 0.222 & 0.632 & 0.192 & 0.03355 \\
+yandexgpt-pro-5.1 & 20 & 0.662 & 0.541 & 0.122 & 0.476 & 0.192 & 0.06357 \\
+deepseek-v4-pro & 20 & 0.762 & 0.541 & 0.222 & 0.566 & 0.192 & 0.694 \\
+qwen3-8b & 20 & 0.637 & 0.541 & 0.097 & 0.424 & 0.192 & 0.6076 \\
+\hline
+\end{tabular}
+\end{table}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.9\textwidth]{inc/img/H12_llm_vs_logreg.png}
+\caption{H12: Few-shot LLM против логистической регрессии}
+\label{fig:h12}
+\end{figure}
+
 \chapter{Разбор пяти ошибок моделей}
 \section{Ошибка 1: Арифметическая галлюцинация (A2, GigaChat-2-Max)}
 \textbf{call\_id:} \texttt{00e813e465fc46a695c71db000116e9d}
