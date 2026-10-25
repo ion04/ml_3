@@ -18,3 +18,9 @@ flow/logs/
 
 # Резервная копия отчёта перед пересборкой (src.build_report)
 report/*.bak
+
+#tex
+main.*
+!main.pdf
+!main.tex
+review_tex/inc
